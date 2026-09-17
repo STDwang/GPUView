@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$ideRoot = Join-Path $projectRoot 'ide\vs2022'
+$ideRoot = $projectRoot
 New-Item -ItemType Directory -Path $ideRoot -Force | Out-Null
 
 # VS C++工程文件中写明确的相对路径；目录枚举由脚本承担，不要求逐项维护。
@@ -17,7 +17,7 @@ $filterItems = @()
 $folders = [Collections.Generic.SortedSet[string]]::new()
 foreach ($entry in $entries) {
     $relative = $entry.FullName.Substring($projectRoot.Length + 1).Replace('/', '\')
-    $path = [Security.SecurityElement]::Escape('..\..\' + $relative)
+    $path = [Security.SecurityElement]::Escape($relative)
     $kind = if ($entry.Extension -in @('.cpp','.cxx')) { 'ClCompile' } elseif ($entry.Extension -in @('.h','.hpp')) { 'ClInclude' } else { 'None' }
     $items += "    <$kind Include=`"$path`" />"
     $folder = Split-Path $relative -Parent

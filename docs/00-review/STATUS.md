@@ -4,7 +4,9 @@
 
 ## 本次完成
 
-最新增量：支持VS Code/VS2022调试，CMake按模块目录自动收集源码。公开VS入口ide/vs2022/GPUView.sln使用相对源码路径和工程宏，后台仍调用CMake；build内生成工程为本机缓存，不提交。入口文件移动到src/app、tests/core、tests/ui、tools/benchmark，文档链接同步调整。调试构建自动部署Qt运行库，Debug/Release测试日志分离。
+最新目录调整：VS2022的GPUView.sln、GPUView.vcxproj、GPUView.sources.props、GPUView.vcxproj.filters均移至项目根目录；源文件和调试/输出路径同步改为相对根目录，生成脚本不再创建ide目录。
+
+最新增量：支持VS Code/VS2022调试，CMake按模块目录自动收集源码。公开VS入口GPUView.sln使用相对源码路径和工程宏，后台仍调用CMake；build内生成工程为本机缓存，不提交。入口文件移动到src/app、tests/core、tests/ui、tools/benchmark，文档链接同步调整。调试构建自动部署Qt运行库，Debug/Release测试日志分离。
 
 验证：Debug与Release均31个实际用例通过；VS入口MSBuild构建、文件增删自动发现、含空格目录迁移构建、Debug本地依赖启动均成功。PDB存在。IDE交互式断点未做UI自动化；项目F5配置已提供。
 

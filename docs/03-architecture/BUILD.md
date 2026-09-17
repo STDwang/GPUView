@@ -30,13 +30,13 @@ python -m venv .venv
 
 ### Visual Studio 2022
 
-打开 [ide/vs2022/GPUView.sln](../../ide/vs2022/GPUView.sln)，选Debug/x64，设置断点并F5。工程只有一个GPUView调试入口，内部core/adapters等库仍由CMake分别构建。Build/Rebuild/Clean分别映射到同一个脚本的相应动作。
+打开 [GPUView.sln](../../GPUView.sln)，选Debug/x64，设置断点并F5。工程只有一个GPUView调试入口，内部core/adapters等库仍由CMake分别构建。Build/Rebuild/Clean分别映射到同一个脚本的相应动作。
 
-该入口使用VS的Makefile项目机制调用CMake，不重复定义编译选项。sources.props和filters由tools/sync-vs-sources.ps1枚举目录生成，源码Include统一是`..\..\src\...`等相对路径。新增/删除源码后正常构建会同步；VS若提示工程文件改变，重新加载即可。也可以先单独运行同步脚本再打开工程。
+该入口使用VS的Makefile项目机制调用CMake，不重复定义编译选项。sources.props和filters由tools/sync-vs-sources.ps1枚举目录生成，源码Include统一是`src\...`等相对路径。新增/删除源码后正常构建会同步；VS若提示工程文件改变，重新加载即可。也可以先单独运行同步脚本再打开工程。
 
 工程内的源码、输出、包含目录用相对路径，调试命令/工作目录使用`$(ProjectDir)`定位，不写固定盘符。PDB由Debug构建产生，Qt运行库自动部署到exe旁，IDE无需修改全局PATH。
 
-**路径边界**：公开、可迁移的Studio入口是ide/vs2022里的工程。build/GPUView.sln等文件由CMake生成，缓存/工具依赖会含本机绝对路径，不是可迁移工程，不提交仓库。搬目录或换机器后重新构建生成build，不复制旧缓存。CMake的CMAKE_USE_RELATIVE_PATHS已失效，不能靠它强制原生生成器全相对化。[CMake说明](https://cmake.org/cmake/help/latest/variable/CMAKE_USE_RELATIVE_PATHS.html)、[VS Makefile项目](https://learn.microsoft.com/en-us/cpp/build/reference/creating-a-makefile-project?view=msvc-170)
+**路径边界**：公开、可迁移的Studio入口是项目根目录的GPUView.sln/GPUView.vcxproj。build/GPUView.sln等文件由CMake生成，缓存/工具依赖会含本机绝对路径，不是可迁移工程，不提交仓库。搬目录或换机器后重新构建生成build，不复制旧缓存。CMake的CMAKE_USE_RELATIVE_PATHS已失效，不能靠它强制原生生成器全相对化。[CMake说明](https://cmake.org/cmake/help/latest/variable/CMAKE_USE_RELATIVE_PATHS.html)、[VS Makefile项目](https://learn.microsoft.com/en-us/cpp/build/reference/creating-a-makefile-project?view=msvc-170)
 
 ### 命令行
 

@@ -31,7 +31,7 @@
 ### 在IDE里调试
 
 - **VS Code**：打开仓库根目录，按F5选择`GPUView (MSVC Debug)`。预启动任务自动构建Debug并部署Qt DLL；C/C++扩展提供MSVC调试器。
-- **Visual Studio 2022**：打开 [GPUView.sln](ide/vs2022/GPUView.sln)，选择`Debug | x64`，按F5。该工程的源码、包含目录、输出位置均为相对路径或工程宏，构建由CMake完成。
+- **Visual Studio 2022**：打开 [GPUView.sln](GPUView.sln)，选择`Debug | x64`，按F5。该工程的源码、包含目录、输出位置均为相对路径或工程宏，构建由CMake完成。
 - 可在 [main.cpp](src/app/main.cpp) 或 `SessionController::start` 设置断点。详细步骤及路径边界见 [构建和运行](docs/03-architecture/BUILD.md)。
 
 新增源码只需放入对应模块目录。CMake按目录自动收集；Studio浏览列表由构建脚本自动同步，不必手动把每个文件写进CMakeLists。

@@ -7,7 +7,7 @@
 同日新增VS Code/VS2022入口后：
 
 - Debug、Release分别运行2个CTest套件、31个实际用例，全部通过。
-- 通过MSBuild构建公开的ide/vs2022/GPUView.sln成功，不依赖修改原生CMake生成工程。
+- 通过MSBuild构建公开的GPUView.sln成功，不依赖修改原生CMake生成工程。
 - 新增临时cpp到src/core，运行共用build.ps1可自动纳入并编译；删除后再次构建，工程中不再引用它。无需改CMakeLists。
 - 复制公开项目文件到带空格的新目录，SDK用本机目录联接复用；在新目录通过VS入口完成全新Debug构建。此项验证项目路径可迁移，不是另一台机器的干净部署测试。
 - Debug生成GPUView.pdb；去掉PATH中的Qt目录后，Debug应用依靠exe旁的DLL完成离屏启动/截图并返回0。离屏平台插件仍显式来自SDK，桌面调试的Windows插件已部署在exe旁。
