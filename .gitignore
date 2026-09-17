@@ -1,0 +1,24 @@
+# 本机工具与构建结果
+.venv/
+.tools/
+build*/
+artifacts/
+*.user
+aqtinstall.log
+
+# 原始采集及个人上下文不公开；公开示例使用人工生成/脱敏夹具
+data/raw/
+data/local/
+docs/local/
+docs/01-context/CONTEXT.md
+docs/08-references/SOURCES.md
+assets/reference/
+benchmarks/results/local/
+
+# 凭据、编辑器与临时文件
+.env
+.env.*
+CMakeUserPresets.json
+.vs/
+*.log
+*.tmp
