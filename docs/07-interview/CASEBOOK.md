@@ -192,7 +192,7 @@ result.scale_ = (static_cast<long double>(b.sessionNs) - a.sessionNs)
 
 本次可复现问题：大量事件的窄范围查询如果每次全量扫描，其时间随总事件数增加。实现了朴素扫描和区间索引两条路径，用同一seed、同一数据、同一100个范围检查命中数量一致，再比较耗时。
 
-代码：[benchmark_main.cpp](../../tools/benchmark_main.cpp)。
+代码：[benchmark_main.cpp](../../tools/benchmark/main.cpp)。
 
 ```cpp
 if (naiveCount != indexedCount) {
@@ -211,7 +211,7 @@ if (naiveCount != indexedCount) {
 
 现象：第一次自动渲染能画图形，但所有文字显示方框。判断不是UTF-8源文件损坏，因为系统字体未在Windows离屏后端自动枚举。
 
-处理：在 [main.cpp](../../src/main.cpp) 中通过QFontDatabase读取本机系统字体并设置应用字体，不把系统字体文件打包公开。重新构建、运行离屏截图并目视检查，中文与数字显示正常。
+处理：在 [main.cpp](../../src/app/main.cpp) 中通过QFontDatabase读取本机系统字体并设置应用字体，不把系统字体文件打包公开。重新构建、运行离屏截图并目视检查，中文与数字显示正常。
 
 ### 时间轴最后一个刻度被右侧裁切
 
@@ -222,5 +222,17 @@ if (naiveCount != indexedCount) {
 现象：CTest返回通过，但详细日志为空，不便保存可审查证据。先显式设置WIN32_EXECUTABLE FALSE，当前执行环境仍没有捕获到标准输出；最终让Qt Test使用`-o 文件,txt`写日志，构建脚本读取日志并保留原退出码。位置：[CMakeLists.txt](../../CMakeLists.txt)、[build.ps1](../../tools/build.ps1)。确认日志包含全部用例结果，而不只依赖进程返回0。
 
 ## 后续必须补充的真实问题
+
+### 补充：新增源码后VS仍使用旧文件列表
+
+现象：直接在正在执行的MSBuild中通过CONFIGURE_DEPENDS触发重新生成，当前已加载的工程列表可能仍是旧版本；删除文件时会尝试编译不存在的旧路径。
+
+处理：两个IDE统一先由build.ps1显式运行CMake配置，再启动MSBuild，而非只调用`cmake --build`。模块列表通过 [CollectSources.cmake](../../cmake/CollectSources.cmake) 按目录收集，VS浏览列表由 [sync-vs-sources.ps1](../../tools/sync-vs-sources.ps1)自动生成相对路径。新增/删除临时文件均实际验证过。这既满足无需手工列文件，也避免构建器缓存旧图。
+
+### 补充：Debug部署导致离屏插件找不到
+
+现象：windeployqt把运行库部署到exe旁后，Qt从部署目录搜索插件；桌面程序所需Windows插件已复制，但离屏测试插件没有部署，导致GUI测试启动失败。
+
+处理：应用保留默认桌面插件，CTest为widget_interaction单独指定SDK平台插件目录。Debug和Release日志分别命名，运行前清空，避免失败时误读旧配置通过日志。代码见 [CMakeLists.txt](../../CMakeLists.txt) 和 [build.ps1](../../tools/build.ps1)。
 
 PresentMon版本字段差异、缺失帧统计、多源对齐、异步范围统计、完整回放背压和真实UI性能基准尚未实现。实现后将真实复现、修复与测试补入本文件；不能把以上教学原型当完整面试项目已经完成。

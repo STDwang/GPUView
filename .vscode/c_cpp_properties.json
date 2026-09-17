@@ -1,0 +1,19 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "Windows MSVC",
+      "intelliSenseMode": "windows-msvc-x64",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64/include",
+        "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64/include/QtCore",
+        "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64/include/QtGui",
+        "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64/include/QtWidgets",
+        "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64/include/QtTest"
+      ],
+      "defines": ["QT_CORE_LIB", "QT_GUI_LIB", "QT_WIDGETS_LIB"]
+    }
+  ]
+}

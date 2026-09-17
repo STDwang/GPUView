@@ -28,6 +28,14 @@
 
 ## 快速构建（Windows）
 
+### 在IDE里调试
+
+- **VS Code**：打开仓库根目录，按F5选择`GPUView (MSVC Debug)`。预启动任务自动构建Debug并部署Qt DLL；C/C++扩展提供MSVC调试器。
+- **Visual Studio 2022**：打开 [GPUView.sln](ide/vs2022/GPUView.sln)，选择`Debug | x64`，按F5。该工程的源码、包含目录、输出位置均为相对路径或工程宏，构建由CMake完成。
+- 可在 [main.cpp](src/app/main.cpp) 或 `SessionController::start` 设置断点。详细步骤及路径边界见 [构建和运行](docs/03-architecture/BUILD.md)。
+
+新增源码只需放入对应模块目录。CMake按目录自动收集；Studio浏览列表由构建脚本自动同步，不必手动把每个文件写进CMakeLists。
+
 已验证 Qt **6.8.3 msvc2022_64**、Visual Studio 2022 C++工具、CMake、C++17。需要匹配的Qt SDK和VS桌面C++组件。
 
 ```powershell
@@ -41,7 +49,7 @@
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="你的Qt SDK路径"
 cmake --build build --config Release --parallel
-# 运行时把Qt的bin目录加到本次终端PATH，不修改系统PATH
+# 手动CMake构建未部署DLL时，运行/测试前把Qt的bin目录加到本次终端PATH
 ctest --test-dir build -C Release --output-on-failure
 ./build/Release/GPUView.exe
 ```
@@ -62,8 +70,8 @@ SDK准备、运行与部署见 [构建和运行](docs/03-architecture/BUILD.md)�
 | src/adapters | 教学数据生成；后续文件适配器 | [synthetic_source.cpp](src/adapters/synthetic_source.cpp) |
 | src/application | 任务、快照发布、请求合并、取消 | [session_controller.cpp](src/application/session_controller.cpp) |
 | src/ui_widgets | 窗口组装、时间轴绘制和输入 | [timeline_widget.cpp](src/ui_widgets/timeline_widget.cpp) |
-| tests | 核心/并发/GUI用例 | [core_tests.cpp](tests/core_tests.cpp) |
-| tools | 构建、查询基准 | [benchmark_main.cpp](tools/benchmark_main.cpp) |
+| tests | 核心/并发/GUI用例 | [core_tests.cpp](tests/core/core_tests.cpp) |
+| tools | 构建、查询基准 | [benchmark_main.cpp](tools/benchmark/main.cpp) |
 | docs | 需求、设计、任务、面试讲解 | [当前状态](docs/00-review/STATUS.md) |
 | benchmarks | 可公开的原始结果与分析 | [基准报告](benchmarks/reports/BASELINE.md) |
 

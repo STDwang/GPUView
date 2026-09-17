@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GPUView: build Debug",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/build.ps1", "-Configuration", "Debug", "-SkipTests"],
+      "options": {"cwd": "${workspaceFolder}"},
+      "problemMatcher": "$msCompile",
+      "group": {"kind": "build", "isDefault": true}
+    },
+    {
+      "label": "GPUView: test Debug",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/build.ps1", "-Configuration", "Debug"],
+      "options": {"cwd": "${workspaceFolder}"},
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

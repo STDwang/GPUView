@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C8E9F09D-DCEE-47B5-A128-37F3D25FBD37}</ProjectGuid>
+    <Keyword>MakeFileProj</Keyword>
+    <ProjectName>GPUView</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>..\..\build\$(Configuration)\</OutDir>
+    <IntDir>..\..\build\ide-vs2022\$(Configuration)\</IntDir>
+    <NMakeOutput>..\..\build\$(Configuration)\GPUView.exe</NMakeOutput>
+    <NMakeBuildCommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)..\..\tools\build.ps1" -Configuration $(Configuration) -SkipTests</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)..\..\tools\build.ps1" -Configuration $(Configuration) -Action Rebuild -SkipTests</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)..\..\tools\build.ps1" -Configuration $(Configuration) -Action Clean -SkipTests</NMakeCleanCommandLine>
+    <NMakeIncludeSearchPath>..\..\src;..\..\.tools\Qt\6.8.3\msvc2022_64\include;..\..\.tools\Qt\6.8.3\msvc2022_64\include\QtCore;..\..\.tools\Qt\6.8.3\msvc2022_64\include\QtGui;..\..\.tools\Qt\6.8.3\msvc2022_64\include\QtWidgets;..\..\.tools\Qt\6.8.3\msvc2022_64\include\QtTest;$(NMakeIncludeSearchPath)</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>QT_WIDGETS_LIB;QT_GUI_LIB;QT_CORE_LIB;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeIntelliSenseOptions>/std:c++17 /utf-8</NMakeIntelliSenseOptions>
+    <LocalDebuggerCommand>$(ProjectDir)..\..\build\$(Configuration)\GPUView.exe</LocalDebuggerCommand>
+    <LocalDebuggerWorkingDirectory>$(ProjectDir)..\..\</LocalDebuggerWorkingDirectory>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
+  <Import Project="GPUView.sources.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

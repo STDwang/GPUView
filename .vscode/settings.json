@@ -1,0 +1,9 @@
+{
+  "cmake.configureOnOpen": false,
+  "cmake.generator": "Visual Studio 17 2022",
+  "cmake.configureArgs": ["-A", "x64"],
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.configureSettings": {
+    "CMAKE_PREFIX_PATH": "${workspaceFolder}/.tools/Qt/6.8.3/msvc2022_64"
+  }
+}

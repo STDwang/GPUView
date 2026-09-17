@@ -4,6 +4,10 @@
 
 ## 本次完成
 
+最新增量：支持VS Code/VS2022调试，CMake按模块目录自动收集源码。公开VS入口ide/vs2022/GPUView.sln使用相对源码路径和工程宏，后台仍调用CMake；build内生成工程为本机缓存，不提交。入口文件移动到src/app、tests/core、tests/ui、tools/benchmark，文档链接同步调整。调试构建自动部署Qt运行库，Debug/Release测试日志分离。
+
+验证：Debug与Release均31个实际用例通过；VS入口MSBuild构建、文件增删自动发现、含空格目录迁移构建、Debug本地依赖启动均成功。PDB存在。IDE交互式断点未做UI自动化；项目F5配置已提供。
+
 - 更新用户决策：学习和面试讲解优先，不要求代码全部亲手编写。
 - 项目协作要求写入AGENTS.md；十题清单与CASEBOOK关联模块、代码、测试。
 - 独立Qt6.8.3 SDK、VS2022/CMake构建及Qt Test。

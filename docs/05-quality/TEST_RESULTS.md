@@ -2,6 +2,21 @@
 
 2026-09-17，Qt6.8.3/MSVC2022 Release，Windows11。
 
+## IDE与构建增量验证
+
+同日新增VS Code/VS2022入口后：
+
+- Debug、Release分别运行2个CTest套件、31个实际用例，全部通过。
+- 通过MSBuild构建公开的ide/vs2022/GPUView.sln成功，不依赖修改原生CMake生成工程。
+- 新增临时cpp到src/core，运行共用build.ps1可自动纳入并编译；删除后再次构建，工程中不再引用它。无需改CMakeLists。
+- 复制公开项目文件到带空格的新目录，SDK用本机目录联接复用；在新目录通过VS入口完成全新Debug构建。此项验证项目路径可迁移，不是另一台机器的干净部署测试。
+- Debug生成GPUView.pdb；去掉PATH中的Qt目录后，Debug应用依靠exe旁的DLL完成离屏启动/截图并返回0。离屏平台插件仍显式来自SDK，桌面调试的Windows插件已部署在exe旁。
+- 静态检查VS工程/源码清单使用相对路径和工程宏；VS Code配置用workspaceFolder。两个IDE的交互式F5和断点命中尚未通过UI自动化验证。
+
+修复的环境问题：Windows PowerShell5.1读取无BOM中文脚本可能误解析，统一保存UTF-8 BOM；部署后的Qt插件搜索路径变化使离屏测试无法启动，CTest独立配置平台插件目录。测试日志按配置区分并在执行前清空，避免读到旧Release结果。
+
+## 教学内核原有验证
+
 - CTest：2/2套件通过。
 - CoreTests：27个实际测试用例通过，另有初始化/清理各1项，Qt Test合计29 passed。
 - UiTests：4个实际测试用例通过，另有初始化/清理各1项，Qt Test合计6 passed。

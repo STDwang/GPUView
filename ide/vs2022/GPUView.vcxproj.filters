@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="cmake" />
+    <Filter Include="src" />
+    <Filter Include="src\adapters" />
+    <Filter Include="src\app" />
+    <Filter Include="src\application" />
+    <Filter Include="src\core" />
+    <Filter Include="src\ui_widgets" />
+    <Filter Include="tests" />
+    <Filter Include="tests\core" />
+    <Filter Include="tests\ui" />
+    <Filter Include="tools" />
+    <Filter Include="tools\benchmark" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\cmake\CollectSources.cmake"><Filter>cmake</Filter></None>
+    <None Include="..\..\CMakeLists.txt" />
+    <ClCompile Include="..\..\src\adapters\synthetic_source.cpp"><Filter>src\adapters</Filter></ClCompile>
+    <ClInclude Include="..\..\src\adapters\synthetic_source.h"><Filter>src\adapters</Filter></ClInclude>
+    <ClCompile Include="..\..\src\app\main.cpp"><Filter>src\app</Filter></ClCompile>
+    <ClCompile Include="..\..\src\application\session_controller.cpp"><Filter>src\application</Filter></ClCompile>
+    <ClInclude Include="..\..\src\application\session_controller.h"><Filter>src\application</Filter></ClInclude>
+    <ClCompile Include="..\..\src\core\clock_mapping.cpp"><Filter>src\core</Filter></ClCompile>
+    <ClInclude Include="..\..\src\core\clock_mapping.h"><Filter>src\core</Filter></ClInclude>
+    <ClCompile Include="..\..\src\core\render_query.cpp"><Filter>src\core</Filter></ClCompile>
+    <ClInclude Include="..\..\src\core\render_query.h"><Filter>src\core</Filter></ClInclude>
+    <ClCompile Include="..\..\src\core\trace_store.cpp"><Filter>src\core</Filter></ClCompile>
+    <ClInclude Include="..\..\src\core\trace_store.h"><Filter>src\core</Filter></ClInclude>
+    <ClCompile Include="..\..\src\ui_widgets\main_window.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
+    <ClInclude Include="..\..\src\ui_widgets\main_window.h"><Filter>src\ui_widgets</Filter></ClInclude>
+    <ClCompile Include="..\..\src\ui_widgets\timeline_widget.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
+    <ClInclude Include="..\..\src\ui_widgets\timeline_widget.h"><Filter>src\ui_widgets</Filter></ClInclude>
+    <ClCompile Include="..\..\tests\core\core_tests.cpp"><Filter>tests\core</Filter></ClCompile>
+    <ClCompile Include="..\..\tests\ui\ui_tests.cpp"><Filter>tests\ui</Filter></ClCompile>
+    <ClCompile Include="..\..\tools\benchmark\main.cpp"><Filter>tools\benchmark</Filter></ClCompile>
+    <None Include="..\..\tools\build.ps1"><Filter>tools</Filter></None>
+    <None Include="..\..\tools\sync-vs-sources.ps1"><Filter>tools</Filter></None>
+  </ItemGroup>
+</Project>

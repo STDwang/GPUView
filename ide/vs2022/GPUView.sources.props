@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="..\..\cmake\CollectSources.cmake" />
+    <None Include="..\..\CMakeLists.txt" />
+    <ClCompile Include="..\..\src\adapters\synthetic_source.cpp" />
+    <ClInclude Include="..\..\src\adapters\synthetic_source.h" />
+    <ClCompile Include="..\..\src\app\main.cpp" />
+    <ClCompile Include="..\..\src\application\session_controller.cpp" />
+    <ClInclude Include="..\..\src\application\session_controller.h" />
+    <ClCompile Include="..\..\src\core\clock_mapping.cpp" />
+    <ClInclude Include="..\..\src\core\clock_mapping.h" />
+    <ClCompile Include="..\..\src\core\render_query.cpp" />
+    <ClInclude Include="..\..\src\core\render_query.h" />
+    <ClCompile Include="..\..\src\core\trace_store.cpp" />
+    <ClInclude Include="..\..\src\core\trace_store.h" />
+    <ClCompile Include="..\..\src\ui_widgets\main_window.cpp" />
+    <ClInclude Include="..\..\src\ui_widgets\main_window.h" />
+    <ClCompile Include="..\..\src\ui_widgets\timeline_widget.cpp" />
+    <ClInclude Include="..\..\src\ui_widgets\timeline_widget.h" />
+    <ClCompile Include="..\..\tests\core\core_tests.cpp" />
+    <ClCompile Include="..\..\tests\ui\ui_tests.cpp" />
+    <ClCompile Include="..\..\tools\benchmark\main.cpp" />
+    <None Include="..\..\tools\build.ps1" />
+    <None Include="..\..\tools\sync-vs-sources.ps1" />
+  </ItemGroup>
+</Project>
