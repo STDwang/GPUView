@@ -17,7 +17,9 @@ signals:
     void eventPicked(qulonglong id, const QString& details);
     void rangeSelected(qint64 begin, qint64 end);
     void diagnosticsChanged(const QString& text);
+    void trackScrollChanged(int firstTrack, int maximum, int pageStep);
 protected:
+    void resizeEvent(QResizeEvent*) override;
     void paintEvent(QPaintEvent*) override;
     void wheelEvent(QWheelEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
@@ -25,6 +27,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
 private:
+    int visibleTrackCount() const;
+    void syncTrackScroll(int requestedTrack);
     TimeNs timeAt(double x) const;
     void pick(const QPoint& point);
     static constexpr int gutter = 150;

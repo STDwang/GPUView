@@ -3,6 +3,7 @@
 #include <QLabel>
 #include <QProgressBar>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QTextBrowser>
 #include <QToolBar>
@@ -32,12 +33,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     heading->setStyleSheet(QStringLiteral("color:#55dabb;font-size:15px;font-weight:600;"));
     layout->addWidget(heading);
     timeline_ = new TimelineWidget;
-    layout->addWidget(timeline_, 1);
-    auto* scroll = new QScrollBar(Qt::Horizontal);
-    scroll->setRange(0, 63);
+    auto* trackLayout = new QHBoxLayout;
+    trackLayout->addWidget(timeline_, 1);
+    auto* scroll = new QScrollBar(Qt::Vertical);
+    scroll->setObjectName(QStringLiteral("trackScrollBar"));
+    scroll->setRange(0, 0);
     scroll->setToolTip(QStringLiteral("切换首个可见轨道"));
-    layout->addWidget(scroll);
+    trackLayout->addWidget(scroll);
+    layout->addLayout(trackLayout, 1);
     connect(scroll, &QScrollBar::valueChanged, timeline_, &TimelineWidget::setFirstTrack);
+    connect(timeline_, &TimelineWidget::trackScrollChanged, scroll, [scroll](int first, int maximum, int pageStep) {
+        // 视图提供范围，窗口负责控件绑定；阻断回传以免更新范围时递归改动视图。
+        const QSignalBlocker blocker(scroll);
+        scroll->setRange(0, maximum);
+        scroll->setPageStep(pageStep);
+        scroll->setValue(first);
+    });
     setCentralWidget(central);
     auto* detailDock = new QDockWidget(QStringLiteral("事件 / 面试讲解"), this);
     auto* detail = new QTextBrowser;

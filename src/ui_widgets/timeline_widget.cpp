@@ -18,6 +18,7 @@ void TimelineWidget::setSnapshot(Snapshot snapshot) {
     firstTrack_ = 0;
     selection_.reset();
     cache_.clear();
+    syncTrackScroll(0);
     resetViewport();
 }
 void TimelineWidget::resetViewport() {
@@ -26,8 +27,22 @@ void TimelineWidget::resetViewport() {
     update();
 }
 void TimelineWidget::setFirstTrack(int track) {
-    firstTrack_ = std::uint32_t(std::max(0, track));
+    syncTrackScroll(track);
     update();
+}
+int TimelineWidget::visibleTrackCount() const {
+    return std::max(1, (height() - top) / row);
+}
+void TimelineWidget::syncTrackScroll(int requestedTrack) {
+    const int pageStep = visibleTrackCount();
+    const int maximum = std::max(0, (snapshot_ ? int(snapshot_->tracks.size()) : 0) - pageStep);
+    // 范围与绘制共享完整可见行数，窗口变高时避免末页留下大量空白。
+    firstTrack_ = std::uint32_t(std::clamp(requestedTrack, 0, maximum));
+    emit trackScrollChanged(int(firstTrack_), maximum, pageStep);
+}
+void TimelineWidget::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    syncTrackScroll(int(firstTrack_));
 }
 void TimelineWidget::paintEvent(QPaintEvent*) {
     QElapsedTimer elapsed;
@@ -41,7 +56,7 @@ void TimelineWidget::paintEvent(QPaintEvent*) {
     }
     const int plotWidth = std::max(1, width() - gutter - 12);
     const auto view = viewport_.range();
-    const auto visibleTracks = std::uint32_t(std::max(1, (height() - top) / row));
+    const auto visibleTracks = std::uint32_t(visibleTrackCount());
     const auto& batch = cache_.get(snapshot_, {snapshot_->version, view, plotWidth, firstTrack_, visibleTracks});
     lastPrimitives_ = batch.primitives.size();
     painter.setPen(QColor("#354252"));

@@ -1,5 +1,9 @@
 # 教学内核验证记录
 
+## 2026-09-18 轨道滚动条调整
+
+Debug构建成功，2个CTest套件通过，32个实际用例（Core 27、UI 5）全部通过。新增 `trackScrollFollowsViewport` 验证竖向方向、位于时间轴与事件栏之间、末页随窗口增高收紧范围，以及清空快照后回到零范围。本轮未重跑Release。
+
 2026-09-17，Qt6.8.3/MSVC2022 Release，Windows11。
 
 ## IDE与构建增量验证

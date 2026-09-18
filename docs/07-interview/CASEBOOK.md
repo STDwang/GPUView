@@ -223,6 +223,12 @@ if (naiveCount != indexedCount) {
 
 ## 后续必须补充的真实问题
 
+### 轨道滚动与可见区如何保持一致（Q01/Q03）
+
+原实现使用底部横向滑条且固定范围0–63，末页可以只剩一条轨道。现在把竖向滚动条放在时间轴和事件栏之间。[TimelineWidget::syncTrackScroll](../../src/ui_widgets/timeline_widget.cpp) 使用 `maximum = max(0, totalTracks - visibleTrackCount())` 限制首条轨道；窗口变高或数据变化时重新夹取当前位置。绘制使用同一可见行数，避免控件范围和实际绘制不一致。
+
+视图只发出位置、上限和页步长，MainWindow绑定QScrollBar，并用QSignalBlocker阻断范围更新产生的反馈。视图不依赖滚动条控件，便于后续Quick复用思路。[trackScrollFollowsViewport](../../tests/ui/ui_tests.cpp) 验证左右位置、滚动到底后增高窗口以及清空快照。当前是整轨道滚动，尚未实现像素级平滑滚动。
+
 ### 补充：新增源码后VS仍使用旧文件列表
 
 现象：直接在正在执行的MSBuild中通过CONFIGURE_DEPENDS触发重新生成，当前已加载的工程列表可能仍是旧版本；删除文件时会尝试编译不存在的旧路径。
