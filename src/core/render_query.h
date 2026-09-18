@@ -9,6 +9,7 @@ struct RenderKey {
     int width;
     std::uint32_t firstTrack;
     std::uint32_t trackCount;
+    std::vector<std::uint32_t> trackIds; // 空值兼容连续轨道；UI传入过滤后的有序ID。
     bool operator==(const RenderKey& other) const;
 };
 struct Primitive {
@@ -46,6 +47,7 @@ public:
     void reset(TimeRange bounds);
     void zoom(double factor, double anchor);
     void pan(double fraction);
+    void show(TimeRange range) { if (range.end > range.begin) set(range.begin, range.end - range.begin); }
     TimeRange range() const { return range_; }
 private:
     void set(TimeNs begin, TimeNs duration);

@@ -1,5 +1,6 @@
 #pragma once
 #include "application/session_controller.h"
+#include "application/statistics_controller.h"
 #include "ui_widgets/timeline_widget.h"
 #include <QMainWindow>
 namespace gpuview {
@@ -11,6 +12,7 @@ public:
     TimelineWidget* timeline() const { return timeline_; }
 private:
     SessionController controller_;
+    StatisticsController statistics_;
     TimelineWidget* timeline_ = nullptr;
 };
 }

@@ -13,7 +13,9 @@ public:
     explicit SessionController(QObject* parent = nullptr);
     ~SessionController() override;
     void requestSynthetic(std::size_t count);
+    void requestFile(const QString& path);
     void cancel();
+    double loadMs() const { return loadMs_; }
     bool busy() const { return worker_ != nullptr; }
     Snapshot snapshot() const { return current_; }
     std::size_t pendingRequests() const { return pending_.hasValue() ? 1 : 0; }
@@ -23,8 +25,8 @@ signals:
     void progressChanged(int percent);
     void message(const QString& text);
 private:
-    struct Request { std::size_t count; std::uint64_t generation; };
-    struct Result { Snapshot snapshot; QString error; bool cancelled = false; };
+    struct Request { std::size_t count; std::uint64_t generation; QString path; };
+    struct Result { Snapshot snapshot; QString error; bool cancelled = false; double loadMs = 0; };
     void start(Request request);
     QThread* worker_ = nullptr;
     QTimer poll_;
@@ -34,5 +36,6 @@ private:
     Snapshot current_;
     std::uint64_t generation_ = 0;
     int lastProgress_ = -1;
+    double loadMs_ = 0;
 };
 }

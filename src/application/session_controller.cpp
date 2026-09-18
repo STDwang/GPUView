@@ -1,5 +1,7 @@
 #include "application/session_controller.h"
 #include "adapters/synthetic_source.h"
+#include "adapters/presentmon_csv.h"
+#include <QElapsedTimer>
 namespace gpuview {
 SessionController::SessionController(QObject* parent) : QObject(parent) {
     poll_.setInterval(100);
@@ -19,11 +21,16 @@ SessionController::~SessionController() {
     }
 }
 void SessionController::requestSynthetic(std::size_t count) {
-    Request request{count, ++generation_};
+    Request request{count, ++generation_, {}};
     if (worker_) {
         pending_.replace(request);
         cancel_->store(true, std::memory_order_relaxed);
     } else start(request);
+}
+void SessionController::requestFile(const QString& path) {
+    Request request{0, ++generation_, path};
+    if (worker_) { pending_.replace(request); cancel_->store(true, std::memory_order_relaxed); }
+    else start(request);
 }
 void SessionController::cancel() {
     ++generation_; // 即使旧任务刚好完成，迟到结果也不能覆盖现有会话。
@@ -38,9 +45,12 @@ void SessionController::start(Request request) {
     const auto progress = progress_;
     // 捕获值不捕获窗口/控制器this，worker只生产数据，不访问任何GUI对象。
     worker_ = QThread::create([request, cancel, progress, result] {
+        QElapsedTimer timer; timer.start();
         try {
-            result->snapshot = generateTrace(request.count, request.generation, cancel,
-                [progress](int p) { progress->percent.store(p, std::memory_order_relaxed); });
+            auto report = [progress](int p) { progress->percent.store(p, std::memory_order_relaxed); };
+            result->snapshot = request.path.isEmpty() ? generateTrace(request.count, request.generation, cancel, report)
+                : loadPresentMon(std::filesystem::path(request.path.toStdWString()), request.generation, cancel, report);
+            result->loadMs = timer.nsecsElapsed() / 1e6;
         } catch (const Cancelled&) { result->cancelled = true;
         } catch (const std::exception& e) { result->error = QString::fromUtf8(e.what()); }
     });
@@ -53,8 +63,8 @@ void SessionController::start(Request request) {
         thread->deleteLater();
         poll_.stop();
         if (request.generation == generation_) {
-            if (result->snapshot) { current_ = result->snapshot; emit snapshotReady(); }
-            else if (!result->error.isEmpty()) emit message(result->error);
+            if (result->snapshot) { current_ = result->snapshot; loadMs_ = result->loadMs; emit snapshotReady(); }
+            else if (!result->error.isEmpty()) emit message(QStringLiteral("加载失败：%1（保留原会话）").arg(result->error));
         }
         if (auto next = pending_.take()) start(*next);
         else { emit busyChanged(false); if (result->cancelled) emit message(QStringLiteral("已取消，保留原会话")); }

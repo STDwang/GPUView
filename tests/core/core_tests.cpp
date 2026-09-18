@@ -3,6 +3,11 @@
 #include "adapters/synthetic_source.h"
 #include "application/session_controller.h"
 #include <QtTest>
+#include "adapters/presentmon_csv.h"
+#include "core/statistics.h"
+#include "application/statistics_controller.h"
+#include <sstream>
+#include <QTemporaryFile>
 #include <limits>
 #include <random>
 using namespace gpuview;
@@ -10,6 +15,100 @@ using namespace gpuview;
 class CoreTests : public QObject {
     Q_OBJECT
 private slots:
+    void filteredTrackMappingInvalidatesCache() {
+        auto data=buildStore({{1,0,10,0,0},{2,0,20,1,0}},{"a","b"},{"e"},1);
+        RenderCache cache; RenderKey key{1,{0,20},100,0,1,{0}};
+        QCOMPARE(cache.get(data,key).primitives.front().eventId,std::uint64_t(1));
+        key.trackIds={1};
+        QCOMPARE(cache.get(data,key).primitives.front().eventId,std::uint64_t(2));
+        QCOMPARE(cache.misses(),std::uint64_t(2)); key.trackCount=0;
+        QVERIFY(cache.get(data,key).primitives.empty());
+    }
+
+    void frameBaselineUsesFullHistory() {
+        std::vector<Event> events;
+        for(int i=0;i<40;++i) events.push_back({std::uint64_t(i+1),TimeNs(i)*50000000,50000000,0,0});
+        events.push_back({41,2000000000,80000000,0,0});
+        auto data=buildStore(events,{"frames"},{"frame"},1,{}, {},false,true);
+        auto selected=calculateStatistics(*data,{2000000000,2080000000},{0});
+        QCOMPARE(selected.count,std::size_t(1)); QCOMPARE(selected.longFrames,std::size_t(0));
+        QCOMPARE(calculateStatistics(*data,{20,10},{0}).count,std::size_t(0));
+    }
+    void csvEscapesUnorderedAndCancellation() {
+        std::istringstream in("Application,ProcessID,SwapChainAddress,TimeInSeconds,MsBetweenPresents\n\"demo\"\"app\nline\",1,x,2,10\n\"demo\"\"app\nline\",1,x,1,20\n");
+        auto data=readPresentMon(in,1); QCOMPARE(data->tracks.size(),std::size_t(1));
+        QCOMPARE(data->tracks[0].index.events()[0].duration,TimeNs(20000000));
+        auto flag=std::make_shared<std::atomic_bool>(true); std::istringstream cancelled("unused");
+        QVERIFY_THROWS_EXCEPTION(Cancelled,readPresentMon(cancelled,1,flag));
+    }
+
+    void realCaptureFixture() {
+        const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); QVERIFY(!path.isEmpty());
+        auto data=loadPresentMon(std::filesystem::path(path.toStdWString()),1);
+        QCOMPARE(data->eventCount,std::size_t(905));
+        const auto stats=calculateStatistics(*data,data->bounds,{0});
+        QVERIFY(std::abs(stats.meanMs-8.1924959116)<1e-8);
+        QVERIFY(stats.longFrames>0); QCOMPARE(stats.longest->duration,TimeNs(92316100));
+        QVERIFY(!data->tracks[0].frameMaxDuration.empty());
+    }
+
+    void csvQuotedBomInvalidAndGroups() {
+        std::istringstream in("\xef\xbb\xbf" "Application,ProcessID,SwapChainAddress,TimeInSeconds,msBetweenPresents\r\n"
+            "\"demo,one\",1,0x1,2,10\r\n\"demo,one\",1,0x1,2.01,20\r\nother,2,0x2,3,60\r\n"
+            "bad,3,x,NaN,10\r\nbad,3,x,4,-1\r\n");
+        auto data=readPresentMon(in,7);
+        QCOMPARE(data->eventCount,std::size_t(3)); QCOMPARE(data->tracks.size(),std::size_t(2));
+        QVERIFY(data->frames); QVERIFY(!data->synthetic);
+        QCOMPARE(data->tracks[0].index.events()[0].start,TimeNs(0));
+        QCOMPARE(data->tracks[0].index.events()[1].duration,TimeNs(20000000));
+        QVERIFY(data->tracks[0].name.find("demo,one")!=std::string::npos);
+        QVERIFY(data->warnings.size()>=3);
+    }
+    void csvRejectsUnsupportedAndBroken() {
+        std::istringstream unsupported("Application,ProcessID,SwapChainAddress,CPUStartQPC,FrameTime\na,1,x,1,2\n");
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error,readPresentMon(unsupported,1));
+        std::istringstream broken("Application,ProcessID,SwapChainAddress,TimeInSeconds,MsBetweenPresents\n\"broken");
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error,readPresentMon(broken,1));
+        std::istringstream empty("");
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error,readPresentMon(empty,1));
+    }
+    void exactStatisticsClipAndHalfOpen() {
+        auto data=buildStore({{1,0,20,0,0},{2,10,20,0,0},{3,20,10,1,0}},{"a","b"},{"x"},1);
+        auto stats=calculateStatistics(*data,{10,20},{0,1});
+        QCOMPARE(stats.count,std::size_t(2)); QCOMPARE(stats.sumMs,20.0/1e6);
+        QCOMPARE(stats.p95Ms,10.0/1e6); QCOMPARE(stats.longest->id,std::uint64_t(1));
+        QCOMPARE(calculateStatistics(*data,{10,20},{}).count,std::size_t(0));
+    }
+    void frameStatisticsKnownValuesAndBoundary() {
+        std::istringstream in("Application,ProcessID,SwapChainAddress,TimeInSeconds,MsBetweenPresents\na,1,x,0,10\na,1,x,.01,10\na,1,x,.02,20\na,1,x,.04,60\n");
+        auto data=readPresentMon(in,1); auto stats=calculateStatistics(*data,data->bounds,{0});
+        QCOMPARE(stats.count,std::size_t(4)); QCOMPARE(stats.meanMs,25.0); QCOMPARE(stats.p50Ms,10.0);
+        QCOMPARE(stats.p95Ms,60.0); QCOMPARE(stats.longFrames,std::size_t(1));
+        QCOMPARE(stats.longest->duration,TimeNs(60000000));
+        auto selected=calculateStatistics(*data,{10000000,40000000},{0});
+        QCOMPARE(selected.count,std::size_t(2)); QCOMPARE(selected.sumMs,30.0);
+    }
+    void statisticsCancelAndLatestWins() {
+        auto data=generateTrace(100000,1); auto flag=std::make_shared<std::atomic_bool>(true);
+        QVERIFY_THROWS_EXCEPTION(Cancelled,calculateStatistics(*data,data->bounds,{0},flag));
+        StatisticsController controller; QSignalSpy ready(&controller,&StatisticsController::ready);
+        controller.request(data,data->bounds,{0,1,2,3});
+        controller.request(data,{0,1},{});
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(),1,5000);
+        QCOMPARE(controller.result().count,std::size_t(0));
+        controller.request(data,data->bounds,{0}); controller.cancel();
+        QTest::qWait(50); QCOMPARE(ready.count(),1);
+    }
+    void fileLoadFailurePreservesSnapshot() {
+        SessionController controller; QSignalSpy ready(&controller,&SessionController::snapshotReady);
+        QSignalSpy error(&controller,&SessionController::message);
+        controller.requestSynthetic(100); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),1,5000);
+        auto previous=controller.snapshot();
+        controller.requestFile("missing-gpuview-file.csv");
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(),5000);
+        QCOMPARE(controller.snapshot(),previous); QVERIFY(error.count()>0);
+    }
+
     void longIntervalCrossesViewport() {
         IntervalIndex index({{1, 0, 1000, 0, 0}, {2, 100, 5, 0, 0}, {3, 500, 10, 0, 0}});
         auto q = index.query({400, 450});

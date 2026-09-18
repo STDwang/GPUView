@@ -71,3 +71,12 @@ Copy-Item build/Release/GPUView.exe artifacts/GPUView/
 build.ps1运行两个CTest套件并打印build/core-tests-Debug.txt和build/ui-tests-Debug.txt（Release使用相应后缀）。CTest为离屏测试显式指向SDK插件目录，避免windeployqt的桌面插件部署覆盖测试搜索路径。每次测试前清空该配置日志，不复用旧结果。离屏测试不代表物理显示延迟测试。
 
 截图：`GPUView.exe -platform offscreen --screenshot assets/screenshots/timeline.png`。该模式载入百万模拟事件后截图退出；WindowsGUI程序在PowerShell里用Start-Process -Wait等待。读取系统字体用于本机渲染，不分发字体文件。
+
+## v0.2 数据导入与测量入口
+
+- `GPUView.exe --open data/samples/presentmon-real.csv`：打开已匿名化的真实帧样本；也可从工具栏导入。
+- `GPUView.exe -platform offscreen --open data/samples/presentmon-real.csv --analysis --screenshot assets/screenshots/frames.png`：真实帧统计页截图，离屏插件配置同前文。
+- `tools/capture-presentmon.ps1`：固定PresentMon 1.9.2 x64工具，只采本项目D3D11目标PID，原始CSV与manifest写入被忽略的data/raw。目标自带20秒退出。
+- `gpuview_ui_benchmark.exe benchmarks/results/ui-1m.csv 1000000 -platform offscreen`：GUI连续交互与缓存对照；统计口径与复现步骤见UI_PERFORMANCE报告。
+
+新增statistics、presentmon_csv、statistics_controller、frame_time_widget，以及两个独立工具入口，均由目录枚举纳入构建。Qt对象仍由GUI线程持有；两个控制器分别处理加载和统计，各最多一个worker和一个待执行请求。

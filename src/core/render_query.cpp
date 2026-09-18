@@ -5,14 +5,17 @@
 namespace gpuview {
 bool RenderKey::operator==(const RenderKey& other) const {
     return version == other.version && range == other.range && width == other.width &&
-           firstTrack == other.firstTrack && trackCount == other.trackCount;
+           firstTrack == other.firstTrack && trackCount == other.trackCount && trackIds == other.trackIds;
 }
 RenderBatch makeRenderBatch(const TraceStore& store, const RenderKey& key) {
     RenderBatch out;
     if (key.width <= 0 || key.range.end <= key.range.begin) return out;
     const double scale = key.width / double(key.range.end - key.range.begin);
-    const auto endTrack = std::min(store.tracks.size(), std::size_t(key.firstTrack) + key.trackCount);
-    for (std::size_t t = key.firstTrack; t < endTrack; ++t) {
+    const auto total = key.trackIds.empty() ? store.tracks.size() : key.trackIds.size();
+    const auto endTrack = std::min(total, std::size_t(key.firstTrack) + key.trackCount);
+    for (std::size_t visible = key.firstTrack; visible < endTrack; ++visible) {
+        const auto t = key.trackIds.empty() ? std::uint32_t(visible) : key.trackIds[visible];
+        if (t >= store.tracks.size()) continue;
         const auto& track = store.tracks[t];
         // 查询设置硬上限，密集视口切到预计算概览，避免GUI扫描全部事件。
         const auto exact = track.index.query(key.range, std::size_t(key.width) * 2);
@@ -30,7 +33,7 @@ RenderBatch makeRenderBatch(const TraceStore& store, const RenderKey& key) {
             // 概览桶是保守的粗略显示；精确拾取仍回到原始区间索引。
             for (std::size_t b = 0; b < track.overviewCounts.size(); ++b) {
                 const TimeNs begin = TimeNs(b) * store.bucketWidth;
-                const TimeNs end = std::min(store.bounds.end, begin + store.bucketWidth);
+                const TimeNs end = begin + std::min(store.bounds.end - begin, store.bucketWidth);
                 if (end <= key.range.begin || begin >= key.range.end || !track.overviewCounts[b]) continue;
                 const int first = std::clamp(int(double(std::max(begin, key.range.begin) - key.range.begin) * scale), 0, key.width - 1);
                 const int last = std::clamp(int(std::ceil(double(std::min(end, key.range.end) - key.range.begin) * scale)) - 1, first, key.width - 1);

@@ -47,11 +47,14 @@ void IntervalIndex::visit(std::size_t node, std::size_t lo, std::size_t hi, Time
 }
 Snapshot buildStore(std::vector<Event> events, std::vector<std::string> trackNames,
                     std::vector<std::string> names, std::uint64_t version,
-                    const CancelFlag& cancel, const Progress& progress) {
+                    const CancelFlag& cancel, const Progress& progress, bool synthetic, bool frames,
+                    std::string source, std::vector<std::string> warnings) {
     checkCancelled(cancel);
     if (trackNames.empty() || trackNames.size() > 1024) throw std::invalid_argument("invalid tracks");
     auto store = std::make_shared<TraceStore>();
     store->version = version;
+    store->synthetic = synthetic; store->frames = frames;
+    store->source = std::move(source); store->warnings = std::move(warnings);
     store->names = std::move(names);
     store->eventCount = events.size();
     std::vector<std::vector<Event>> grouped(trackNames.size());
@@ -70,13 +73,15 @@ Snapshot buildStore(std::vector<Event> events, std::vector<std::string> trackNam
     store->bucketWidth = store->bounds.end / TimeNs(bins) + 1;
     for (std::size_t t = 0; t < grouped.size(); ++t) {
         checkCancelled(cancel);
-        Track track{trackNames[t], IntervalIndex(std::move(grouped[t]), cancel), {}};
+        Track track{trackNames[t], IntervalIndex(std::move(grouped[t]), cancel), {}, {}};
         std::vector<std::int64_t> difference(bins + 1, 0);
         seen = 0;
+        if (frames) track.frameMaxDuration.resize(bins, 0);
         for (const auto& e : track.index.events()) {
             if (++seen % 4096 == 0) checkCancelled(cancel);
             const auto first = std::size_t(e.start / store->bucketWidth);
             const auto last = std::size_t((e.end() - 1) / store->bucketWidth);
+            if (frames) track.frameMaxDuration[first] = std::max(track.frameMaxDuration[first], e.duration);
             ++difference[first];
             --difference[last + 1];
         }

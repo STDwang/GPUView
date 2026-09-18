@@ -6,15 +6,15 @@
 
 ### 当前教学内核实现差异
 
-已锁定并验证Qt6.8.3/MSVC2022。core采用纯C++17而非Qt Core，易于独立测试和Quick复用。后台CPU任务使用QThread::create，完成通知为QueuedConnection；原子进度邮箱按100ms轮询。它与后文Worker QObject目标方案具有同样的GUI线程边界，但尚未实现文件导入及通用QueryService。
+已锁定并验证Qt6.8.3/MSVC2022。core采用纯C++17而非Qt Core，易于独立测试和Quick复用。后台CPU任务使用QThread::create，完成通知为QueuedConnection；原子进度邮箱按100ms轮询。它与后文Worker QObject目标方案具有同样的GUI线程边界，文件导入已通过SessionController接入；另有独立StatisticsController处理范围统计，通用QueryService尚未实现。
 
-当前LOD为每轨4096概览桶和精确查询上限；缓存为一项RenderBatch，未实现通用256MiB LRU。当前只有时间线视口/选择事件，精确选区统计和文件适配器按后续任务实现。接口示意不是已发布的API承诺。
+当前LOD为每轨4096概览桶和精确查询上限；缓存为一项RenderBatch，未实现通用256MiB LRU。PresentMon适配器位于adapters；精确统计在纯C++ core中实现，由独立控制器调度。MainWindow绑定视图/轨道/选择，TimelineWidget与FrameTimeWidget负责绘制和输入。长帧表使用最多200行的QTableWidget，不给百万记录创建表格项。接口示意不是已发布的API承诺。
 
 建议 C++17、Qt 6 Widgets/Core/Test、CMake、Windows x64。具体 Qt 小版本与 MSVC/MinGW 组合在环境准备任务中依据可获取 SDK 和该版本官方支持矩阵锁定。当前 PATH 命中 Qt 5.9.7/msvc2015，不能混用其库和新编译器；采用独立 Kit 与构建目录，不全局替换旧项目环境。CMake 当前未在 PATH 发现，不等于机器上完全没有安装。
 
 首版自绘图表，不引入额外图表库、数据库和插件动态加载框架。测试统一 Qt Test；开发期按实际编译器能力选择内存检查和 Profiler。SDK 安装、示例编译、打包工具核验均在用户确认后执行。
 
-Qt 的 Model/View 将数据与展示分离，适用于共享数据和自定义表格模型；本项目明细使用 QAbstractTableModel + QTableView。[Qt Model/View](https://doc.qt.io/qt-6/model-view-programming.html)
+Qt 的 Model/View 将数据与展示分离，适用于共享数据和自定义表格模型；完整明细表目标使用 QAbstractTableModel + QTableView；当前仅有有界长帧列表，使用QTableWidget。[Qt Model/View](https://doc.qt.io/qt-6/model-view-programming.html)
 
 ## 2. 模块关系
 

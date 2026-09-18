@@ -53,12 +53,16 @@ struct Track {
     IntervalIndex index;
     // 每桶记录与其相交的事件数，不是GPU利用率，也不用于精确统计。
     std::vector<std::uint32_t> overviewCounts;
+    std::vector<TimeNs> frameMaxDuration; // 帧图概览：按Present时间分桶，值为最大帧间隔。
 };
 
 // Q05：完成构建后只通过shared_ptr<const TraceStore>发布；UI没有写入口。
 struct TraceStore {
     std::uint64_t version = 0;
     bool synthetic = true;
+    bool frames = false;
+    std::string source = "教学模拟 seed 42";
+    std::vector<std::string> warnings;
     TimeRange bounds;
     TimeNs bucketWidth = 1;
     std::size_t eventCount = 0;
@@ -68,7 +72,9 @@ struct TraceStore {
 using Snapshot = std::shared_ptr<const TraceStore>;
 Snapshot buildStore(std::vector<Event> events, std::vector<std::string> tracks,
                     std::vector<std::string> names, std::uint64_t version,
-                    const CancelFlag& cancel = {}, const Progress& progress = {});
+                    const CancelFlag& cancel = {}, const Progress& progress = {},
+                    bool synthetic = true, bool frames = false, std::string source = "教学模拟 seed 42",
+                    std::vector<std::string> warnings = {});
 
 // Q04：最新请求邮箱，最多一个待执行请求；丢弃的是中间任务请求，不是原始事件。
 template<class T> class LatestRequest {
