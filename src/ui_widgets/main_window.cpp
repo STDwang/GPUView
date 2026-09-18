@@ -37,6 +37,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     trackLayout->addWidget(timeline_, 1);
     auto* scroll = new QScrollBar(Qt::Vertical);
     scroll->setObjectName(QStringLiteral("trackScrollBar"));
+    // 显式区分滑槽和滑块，避免全局深色背景覆盖原生样式后只剩轮廓。
+    scroll->setStyleSheet(QStringLiteral(
+        "QScrollBar:vertical{background:#0b121a;width:20px;margin:0;border:1px solid #35495a;border-radius:6px;}"
+        "QScrollBar::handle:vertical{background:#7896ad;min-height:40px;margin:2px;border-radius:5px;}"
+        "QScrollBar::handle:vertical:hover{background:#a5c9e0;}"
+        "QScrollBar::handle:vertical:pressed{background:#55dabb;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;border:0;background:transparent;}"
+        "QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{background:transparent;}"));
     scroll->setRange(0, 0);
     scroll->setToolTip(QStringLiteral("切换首个可见轨道"));
     trackLayout->addWidget(scroll);

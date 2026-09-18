@@ -225,6 +225,8 @@ if (naiveCount != indexedCount) {
 
 ### 轨道滚动与可见区如何保持一致（Q01/Q03）
 
+视觉反馈补充：全局深色QWidget样式下，默认滚动条滑块和滑槽难以区分。在MainWindow中仅为轨道滚动条设置完整子控件样式，以深色滑槽、浅色实心滑块及悬停/按下颜色区分可拖动区域；用实际应用截图检查，而非仅以编译通过判断可用性。
+
 原实现使用底部横向滑条且固定范围0–63，末页可以只剩一条轨道。现在把竖向滚动条放在时间轴和事件栏之间。[TimelineWidget::syncTrackScroll](../../src/ui_widgets/timeline_widget.cpp) 使用 `maximum = max(0, totalTracks - visibleTrackCount())` 限制首条轨道；窗口变高或数据变化时重新夹取当前位置。绘制使用同一可见行数，避免控件范围和实际绘制不一致。
 
 视图只发出位置、上限和页步长，MainWindow绑定QScrollBar，并用QSignalBlocker阻断范围更新产生的反馈。视图不依赖滚动条控件，便于后续Quick复用思路。[trackScrollFollowsViewport](../../tests/ui/ui_tests.cpp) 验证左右位置、滚动到底后增高窗口以及清空快照。当前是整轨道滚动，尚未实现像素级平滑滚动。
