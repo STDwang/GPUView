@@ -2,6 +2,7 @@
 #include "core/trace_store.h"
 #include <optional>
 namespace gpuview {
+struct FrameRow { std::uint32_t track; std::size_t index; bool longFrame; };
 struct Statistics {
     std::size_t count = 0, longFrames = 0;
     double sumMs = 0, meanMs = 0, p50Ms = 0, p95Ms = 0, p99Ms = 0;
@@ -11,6 +12,6 @@ struct Statistics {
     std::vector<std::size_t> histogram = std::vector<std::size_t>(5, 0);
 };
 Statistics calculateStatistics(const TraceStore& store, TimeRange range,
-    const std::vector<std::uint32_t>& tracks, const CancelFlag& cancel = {});
+    const std::vector<std::uint32_t>& tracks, const CancelFlag& cancel = {}, std::vector<FrameRow>* frameRows = nullptr);
 bool isLongFrame(const std::vector<Event>& events, std::size_t index);
 }

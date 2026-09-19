@@ -48,11 +48,11 @@ void IntervalIndex::visit(std::size_t node, std::size_t lo, std::size_t hi, Time
 Snapshot buildStore(std::vector<Event> events, std::vector<std::string> trackNames,
                     std::vector<std::string> names, std::uint64_t version,
                     const CancelFlag& cancel, const Progress& progress, bool synthetic, bool frames,
-                    std::string source, std::vector<std::string> warnings) {
+                    std::string source, std::vector<std::string> warnings, SourceInfo input) {
     checkCancelled(cancel);
     if (trackNames.empty() || trackNames.size() > 1024) throw std::invalid_argument("invalid tracks");
     auto store = std::make_shared<TraceStore>();
-    store->version = version;
+    store->version = version; store->input = std::move(input);
     store->synthetic = synthetic; store->frames = frames;
     store->source = std::move(source); store->warnings = std::move(warnings);
     store->names = std::move(names);

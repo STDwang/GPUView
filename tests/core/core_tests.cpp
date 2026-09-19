@@ -8,6 +8,11 @@
 #include "application/statistics_controller.h"
 #include <sstream>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
+#include <QBuffer>
+#include <QCryptographicHash>
+#include "core/frame_analysis.h"
+#include "application/export_controller.h"
 #include <limits>
 #include <random>
 using namespace gpuview;
@@ -15,6 +20,59 @@ using namespace gpuview;
 class CoreTests : public QObject {
     Q_OBJECT
 private slots:
+    void frameRowsSortIdentityAndSparseHeat() {
+        auto store=buildStore({{9,0,2000000,0,0},{3,500000000,10000000,0,0},{7,2000000000,60000000,0,0}},
+            {"app"},{"frame"},1,{}, {},false,true);
+        auto analysis=analyzeFrames(store,{0,1000000000},{0},FrameSort::Duration,true);
+        QCOMPARE(analysis->rows.size(),std::size_t(2)); QCOMPARE(analysis->event(0).id,std::uint64_t(3));
+        QCOMPARE(analysis->rowForId(9),1); QCOMPARE(analysis->rowForId(7),-1);
+        QCOMPARE(analysis->heat.size(),std::size_t(2)); QCOMPARE(analysis->heat[0].count,std::size_t(2));
+        QCOMPARE(analysis->heat[0].maximum,TimeNs(10000000)); QCOMPARE(analysis->heat[1].begin,TimeNs(2000000000));
+        QCOMPARE(analysis->heatOverview.size(),std::size_t(4096)); QCOMPARE(analysis->heatOverview[2500],TimeNs(0));
+        auto empty=analyzeFrames(store,{1000000000,2000000000},{0}); QCOMPARE(empty->summary.count,std::size_t(0));
+        QVERIFY(!empty->heat.empty()); // 全会话热力图不能因选中空区间而丢失其他时间数据。
+    }
+    void importedBytesHaveMatchingHashAndQuality() {
+        const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto hash=QCryptographicHash::hash(file.readAll(),QCryptographicHash::Sha256).toHex();
+        auto store=loadPresentMon(std::filesystem::path(path.toStdWString()),1);
+        QCOMPARE(QString::fromStdString(store->input.sha256),QString::fromLatin1(hash));
+        QCOMPARE(store->input.records,std::size_t(905)); QCOMPARE(store->input.rejected,std::size_t(0));
+    }
+    void exportMetadataEscapingAndEmptyValues() {
+        auto store=buildStore({{5,0,2000000,0,0}},{"app,\"x\""},{"frame"},1,{}, {},false,true,"source",{}, {"abcd",2,1});
+        auto analysis=analyzeFrames(store,{0,3000000},{0}); QByteArray bytes; QBuffer buffer(&bytes); QVERIFY(buffer.open(QIODevice::WriteOnly));
+        writeAnalysis(buffer,*analysis,ExportFormat::FramesCsv,QStringLiteral("=测试,\"引号\"\n下一行"));
+        QVERIFY(bytes.contains("\"source_sha256\",\"abcd\"")); QVERIFY(bytes.contains("\"source_rejected\",\"1\""));
+        QVERIFY(bytes.contains("frame,,,5,0,2000000,0")); QVERIFY(bytes.contains("\"\"")); QVERIFY(bytes.contains("\"'="));
+        auto empty=analyzeFrames(store,{3000000,4000000},{0}); bytes.clear(); buffer.seek(0);
+        writeAnalysis(buffer,*empty,ExportFormat::Markdown,QStringLiteral("<img>|[link]"));
+        QVERIFY(bytes.contains("N/A")); QVERIFY(bytes.contains("&lt;img&gt;")); QVERIFY(!bytes.contains("<img>"));
+    }
+    void exportCancelMidWritePreservesOriginal() {
+        std::vector<Event> events; for(int i=0;i<3000;++i) events.push_back({std::uint64_t(i+1),TimeNs(i)*1000000,1000000,0,0});
+        auto source=buildStore(events,{"app"},{"frame"},1,{}, {},true,true);
+        auto analysis=analyzeFrames(source,source->bounds,{0}); QTemporaryDir directory; QVERIFY(directory.isValid());
+        const auto path=directory.filePath("report.csv"); QFile original(path); QVERIFY(original.open(QIODevice::WriteOnly)); original.write("previous report"); original.close();
+        auto cancel=std::make_shared<std::atomic_bool>(false); bool wrotePart=false;
+        QVERIFY_THROWS_EXCEPTION(Cancelled,saveAnalysis(path,*analysis,ExportFormat::FramesCsv,{},cancel,[&](int percent) {
+            if(percent>0 && percent<99) { wrotePart=true; cancel->store(true); }
+        }));
+        QVERIFY(wrotePart); QVERIFY(original.open(QIODevice::ReadOnly)); QCOMPARE(original.readAll(),QByteArray("previous report")); original.close();
+        QCOMPARE(QDir(directory.path()).entryList(QDir::Files|QDir::Hidden).size(),1);
+        saveAnalysis(path,*analysis,ExportFormat::SummaryCsv,{}); QVERIFY(original.open(QIODevice::ReadOnly)); QVERIFY(original.readAll().startsWith("record_type"));
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error,saveAnalysis(directory.filePath("missing/report.csv"),*analysis,ExportFormat::SummaryCsv,{}));
+    }
+    void exportControllerUsesFrozenSnapshotAndProtectsInput() {
+        auto source=buildStore({{1,0,100,0,0},{2,100,100,0,0}},{"app"},{"frame"},1,{}, {},false,true);
+        auto first=analyzeFrames(source,{0,100},{0}); QTemporaryDir directory; const auto path=directory.filePath("report.csv");
+        ExportController controller; QSignalSpy done(&controller,&ExportController::completed);
+        QVERIFY(controller.request(path,first,ExportFormat::FramesCsv,{})); first=analyzeFrames(source,{100,200},{0});
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(),1,5000); QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); auto bytes=file.readAll(); file.close();
+        QVERIFY(bytes.contains("frame,,,1,0,100,0")); QVERIFY(!bytes.contains("frame,,,2,"));
+        QVERIFY(!controller.request(path,first,ExportFormat::FramesCsv,{},path));
+    }
+
     void filteredTrackMappingInvalidatesCache() {
         auto data=buildStore({{1,0,10,0,0},{2,0,20,1,0}},{"a","b"},{"e"},1);
         RenderCache cache; RenderKey key{1,{0,20},100,0,1,{0}};

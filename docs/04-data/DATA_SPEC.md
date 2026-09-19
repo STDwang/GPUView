@@ -104,3 +104,11 @@ CSV 解析处理UTF-8 BOM、带引号字段、转义引号、CRLF和空行；数
 | malformed | 鲁棒性 | 引号、无序、重复、缺列、溢出、负时长 |
 
 每个manifest包含schemaVersion、文件hash、来源、工具版本、单位、时钟、场景/时长、数量、synthetic、脱敏状态、生成seed（如适用）。小样本入tests/fixtures，大文件放data；不把重复复制的游戏帧伪装成更长真实录制。
+
+## v0.3 导出协议（2026-09-19已实现）
+
+UTF-8、C locale，模式GPUView-analysis-v1。统计CSV与完整帧CSV统一7列：record_type,key,value,event_id,present_ns,frame_interval_ns,long_frame。metadata记录仅key/value有值，frame记录仅后4列有值。完整帧CSV包含当前组/选区全部有效帧，按表格排序，不受快捷长帧列表200条上限限制。Markdown输出相同元数据与统计摘要。
+
+元数据包含application_version、source_sha256（解析实际读取的原始字节）、synthetic、source_records/rejected、snapshot_version、group、range_begin/end_ns、selection_rule、long_frame_rule、percentile_rule、sort_column/descending、count、统计值、user_notes、warning与limitations。sort_column：0=ID，1=Present，2=间隔，3=长帧。源字节摘要与规范化换行后的摘要可能不同；未识别采集器二进制版本时不得据字段模式假定版本。
+
+CSV值规范转义引号/换行；元数据去除前导空白后若以=+-@开头，增加单引号避免电子表格公式执行，csv_text_policy标明此策略。空选区分位数/FPS为N/A。导出不包含本机完整输入路径。Present时刻归属[begin,end)，间隔不裁剪；长帧依旧参考完整历史。热力图为全组1秒桶max，缺失N/A，颜色不是GPU利用率。

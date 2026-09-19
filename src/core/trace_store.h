@@ -56,11 +56,14 @@ struct Track {
     std::vector<TimeNs> frameMaxDuration; // 帧图概览：按Present时间分桶，值为最大帧间隔。
 };
 
+struct SourceInfo { std::string sha256; std::size_t records = 0, rejected = 0; };
+
 // Q05：完成构建后只通过shared_ptr<const TraceStore>发布；UI没有写入口。
 struct TraceStore {
     std::uint64_t version = 0;
     bool synthetic = true;
     bool frames = false;
+    SourceInfo input;
     std::string source = "教学模拟 seed 42";
     std::vector<std::string> warnings;
     TimeRange bounds;
@@ -74,7 +77,7 @@ Snapshot buildStore(std::vector<Event> events, std::vector<std::string> tracks,
                     std::vector<std::string> names, std::uint64_t version,
                     const CancelFlag& cancel = {}, const Progress& progress = {},
                     bool synthetic = true, bool frames = false, std::string source = "教学模拟 seed 42",
-                    std::vector<std::string> warnings = {});
+                    std::vector<std::string> warnings = {}, SourceInfo input = {});
 
 // Q04：最新请求邮箱，最多一个待执行请求；丢弃的是中间任务请求，不是原始事件。
 template<class T> class LatestRequest {

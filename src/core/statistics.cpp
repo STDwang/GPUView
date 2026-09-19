@@ -16,9 +16,10 @@ bool isLongFrame(const std::vector<Event>& events, std::size_t index) {
     return double(events[index].duration) > threshold;
 }
 Statistics calculateStatistics(const TraceStore& store, TimeRange range,
-    const std::vector<std::uint32_t>& tracks, const CancelFlag& cancel) {
+    const std::vector<std::uint32_t>& tracks, const CancelFlag& cancel, std::vector<FrameRow>* frameRows) {
     checkCancelled(cancel);
     Statistics out;
+    if (frameRows) frameRows->clear();
     if (range.end <= range.begin) return out;
     std::vector<TimeNs> durations;
     TimeNs longest = -1;
@@ -36,7 +37,11 @@ Statistics calculateStatistics(const TraceStore& store, TimeRange range,
             if (duration > longest) { longest = duration; out.longest = e; }
             const double ms = double(duration) / 1e6;
             ++out.histogram[ms <= 8.33 ? 0 : ms <= 16.67 ? 1 : ms <= 33.33 ? 2 : ms <= 50 ? 3 : 4];
-            if (store.frames && isLongFrame(events, i)) { ++out.longFrames; if (out.longEvents.size() < 200) out.longEvents.push_back(e); }
+            if (store.frames) {
+                const bool longFrame = isLongFrame(events, i);
+                if (longFrame) { ++out.longFrames; if (out.longEvents.size() < 200) out.longEvents.push_back(e); }
+                if (frameRows) frameRows->push_back({track, i, longFrame});
+            }
         }
     }
     std::size_t comparisons = 0;

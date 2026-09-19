@@ -10,10 +10,36 @@
 #include <QTableWidget>
 #include <QTabWidget>
 #include "ui_widgets/frame_time_widget.h"
+#include "ui_widgets/frame_details_panel.h"
+#include "ui_widgets/frame_heatmap.h"
+#include <QTableView>
+#include <QAbstractItemModelTester>
 using namespace gpuview;
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    void frameModelContractAndStableSelection() {
+        FrameDetailsPanel panel; auto* model=panel.findChild<FrameTableModel*>(); QAbstractItemModelTester tester(model,QAbstractItemModelTester::FailureReportingMode::QtTest);
+        auto source=buildStore({{9,0,2000000,0,0},{3,10000000,10000000,0,0}},{"app"},{"frame"},1,{}, {},true,true);
+        panel.setAnalysis(analyzeFrames(source,source->bounds,{0})); panel.selectId(9);
+        panel.setAnalysis(analyzeFrames(source,source->bounds,{0},FrameSort::Duration,true));
+        auto* table=panel.findChild<QTableView*>(); QCOMPARE(table->currentIndex().data(Qt::UserRole).toULongLong(),qulonglong(9));
+        QCOMPARE(model->eventAt(0)->id,std::uint64_t(3)); QCOMPARE(model->rowCount(model->index(0,0)),0);
+    }
+    void heatmapTableAndTimelineStayInSync() {
+        MainWindow window; window.show(); const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); window.controller()->requestFile(path);
+        auto* model=window.findChild<FrameTableModel*>(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
+        auto* table=window.findChild<QTableView*>("frameDetailsTable"); table->sortByColumn(2,Qt::DescendingOrder);
+        QTRY_VERIFY_WITH_TIMEOUT(model->analysis() && model->analysis()->sort==FrameSort::Duration,5000);
+        QCOMPARE(model->eventAt(0)->duration,TimeNs(92316100)); table->setCurrentIndex(model->index(0,0));
+        QVERIFY(window.timeline()->selectedEvent()); QCOMPARE(window.timeline()->selectedEvent()->id,model->eventAt(0)->id);
+        auto* heat=window.findChild<FrameHeatmap*>(); QCOMPARE(heat->width(),window.timeline()->width());
+        QTest::mouseClick(heat,Qt::LeftButton,Qt::NoModifier,QPoint(155,35));
+        QTRY_VERIFY_WITH_TIMEOUT(model->analysis() && model->analysis()->range.end==1000000000,5000);
+        QVERIFY(model->rowCount()>0 && model->rowCount()<905);
+        window.timeline()->resetViewport(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
+    }
+
     void realFileAnalysisAndLongFrameNavigation() {
         MainWindow window; window.show();
         const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); QVERIFY(!path.isEmpty());

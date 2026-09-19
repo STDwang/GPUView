@@ -44,10 +44,20 @@ void TimelineWidget::previousView() {
     if (history_.empty()) return;
     viewport_.show(history_.back()); history_.pop_back(); emit viewportChanged(viewport_.range().begin, viewport_.range().end); update();
 }
-void TimelineWidget::focusEvent(const Event& event) {
+void TimelineWidget::selectEvent(const Event& event) {
     const auto it = std::find(tracks_.begin(), tracks_.end(), event.track);
     if (it == tracks_.end()) return;
     setFirstTrack(int(it - tracks_.begin())); selectedEvent_ = event; publishEvent(event);
+    update();
+}
+void TimelineWidget::selectRange(TimeRange range) {
+    if(!snapshot_ || range.end<=range.begin) return;
+    selectedEvent_.reset(); selection_=range;
+    showRange(range); emit rangeSelected(range.begin,range.end); update();
+}
+void TimelineWidget::focusEvent(const Event& event) {
+    if(!snapshot_ || std::find(tracks_.begin(),tracks_.end(),event.track)==tracks_.end()) return;
+    selectEvent(event);
     showRange({std::max<TimeNs>(0, event.start - event.duration / 2), event.end() + std::min(event.duration / 2, snapshot_->bounds.end - event.end())});
     update();
 }

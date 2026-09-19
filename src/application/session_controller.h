@@ -15,6 +15,7 @@ public:
     void requestSynthetic(std::size_t count);
     void requestFile(const QString& path);
     void cancel();
+    QString sourcePath() const { return sourcePath_; }
     double loadMs() const { return loadMs_; }
     bool busy() const { return worker_ != nullptr; }
     Snapshot snapshot() const { return current_; }
@@ -37,5 +38,6 @@ private:
     std::uint64_t generation_ = 0;
     int lastProgress_ = -1;
     double loadMs_ = 0;
+    QString sourcePath_;
 };
 }

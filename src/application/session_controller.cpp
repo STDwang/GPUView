@@ -63,7 +63,7 @@ void SessionController::start(Request request) {
         thread->deleteLater();
         poll_.stop();
         if (request.generation == generation_) {
-            if (result->snapshot) { current_ = result->snapshot; loadMs_ = result->loadMs; emit snapshotReady(); }
+            if (result->snapshot) { current_ = result->snapshot; sourcePath_ = request.path; loadMs_ = result->loadMs; emit snapshotReady(); }
             else if (!result->error.isEmpty()) emit message(QStringLiteral("加载失败：%1（保留原会话）").arg(result->error));
         }
         if (auto next = pending_.take()) start(*next);

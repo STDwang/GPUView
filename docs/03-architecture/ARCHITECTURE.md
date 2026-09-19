@@ -90,3 +90,9 @@ B 采用已导入数据的逻辑游标回放，不额外复制全部数据。显
 ## 8. 未决技术验证
 
 用户确认后先验证：实际 CSV 字段/时间单位、Qt6 Kit、10万行内存估算、百万区间索引查询、PresentMon与遥测时钟关联方式。验证失败先收缩相应支持声明，不能用猜测填满数据面板。
+
+## v0.3实现补充（2026-09-19）
+
+core/frame_analysis保存不可变source+FrameRow索引、稳定ID查找表、稀疏秒桶和4096格max概览。StatisticsController在worker计算/排序，通过最新请求代次检查后发布。FrameTableModel仅在GUI线程绑定结果，不复制百万QVariant，不用每帧QObject；选择用业务ID恢复。
+
+adapters/presentmon_csv同次读取计算摘要；adapters/analysis_export负责格式、转义与QSaveFile原子保存，因此adapters依赖QtCore，core仍不依赖Qt。application/ExportController冻结快照并协调单个导出worker、取消/进度/退出；ui_widgets只处理保存对话框和用户状态。所有权、提交点与证据见[本轮案例](../07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。

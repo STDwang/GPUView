@@ -1,5 +1,8 @@
 #include "ui_widgets/main_window.h"
 #include "ui_widgets/frame_time_widget.h"
+#include "ui_widgets/frame_details_panel.h"
+#include "ui_widgets/frame_heatmap.h"
+#include <QFileInfo>
 #include <QDockWidget>
 #include <QLabel>
 #include <QProgressBar>
@@ -22,7 +25,7 @@
 namespace gpuview {
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("GPUView · 性能分析与学习工作台")); resize(1440, 920);
-    setStyleSheet(QStringLiteral("QMainWindow,QWidget{background:#101923;color:#d7e4ee;} QToolBar{background:#1b2a38;padding:6px;spacing:8px;} QToolButton,QPushButton{padding:6px;border:1px solid #385367;border-radius:4px;} QToolButton:hover,QPushButton:hover{background:#2c4f63;} QDockWidget::title{background:#203343;padding:7px;} QTextBrowser{background:#162330;border:0;padding:8px;} QStatusBar{background:#172532;} QLineEdit,QComboBox{padding:5px;border:1px solid #385367;} QTreeWidget,QTableWidget{alternate-background-color:#182431;} QTabBar::tab{padding:8px;} QTabBar::tab:selected{background:#2c4f63;} QScrollBar:vertical{background:#0b121a;width:20px;margin:0;border:1px solid #35495a;border-radius:6px;} QScrollBar::handle:vertical{background:#7896ad;min-height:40px;margin:2px;border-radius:5px;} QScrollBar::handle:vertical:hover{background:#a5c9e0;} QScrollBar::handle:vertical:pressed{background:#55dabb;} QScrollBar::handle:vertical:disabled{background:#243442;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;border:0;background:transparent;} QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{background:transparent;}"));
+    setStyleSheet(QStringLiteral("QMainWindow,QWidget{background:#101923;color:#d7e4ee;} QToolBar{background:#1b2a38;padding:6px;spacing:8px;} QToolButton,QPushButton{padding:6px;border:1px solid #385367;border-radius:4px;} QToolButton:hover,QPushButton:hover{background:#2c4f63;} QDockWidget::title{background:#203343;padding:7px;} QTextBrowser{background:#162330;border:0;padding:8px;} QStatusBar{background:#172532;} QLineEdit,QComboBox{padding:5px;border:1px solid #385367;} QTreeWidget,QTableWidget,QTableView{alternate-background-color:#182431;} QTabBar::tab{padding:8px;} QTabBar::tab:selected{background:#2c4f63;} QScrollBar:vertical{background:#0b121a;width:20px;margin:0;border:1px solid #35495a;border-radius:6px;} QScrollBar::handle:vertical{background:#7896ad;min-height:40px;margin:2px;border-radius:5px;} QScrollBar::handle:vertical:hover{background:#a5c9e0;} QScrollBar::handle:vertical:pressed{background:#55dabb;} QScrollBar::handle:vertical:disabled{background:#243442;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;border:0;background:transparent;} QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{background:transparent;}"));
     auto* toolbar = addToolBar(QStringLiteral("数据与视图")); toolbar->setMovable(false);
     toolbar->addAction(QStringLiteral("导入 CSV"), this, [this] {
         const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("PresentMon v1 CSV（TimeInSeconds + MsBetweenPresents）"), {}, "CSV (*.csv)");
@@ -44,12 +47,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* frameChart = new FrameTimeWidget; frameChart->hide();
     // 帧图与时间轴共享网格列，避免滚动条样式/DPI造成时间坐标错位。
     auto* plotsLayout = new QGridLayout; plotsLayout->addWidget(frameChart,0,0);
+    auto* heatmap = new FrameHeatmap; heatmap->hide(); plotsLayout->addWidget(heatmap,1,0);
     timeline_ = new TimelineWidget;
+    connect(heatmap,&FrameHeatmap::rangePicked,this,[this](qint64 a,qint64 b) { timeline_->selectRange({a,b}); });
     connect(timeline_, &TimelineWidget::viewportChanged, frameChart, [frameChart](qint64 a,qint64 b) { frameChart->setRange({a,b}); });
     connect(frameChart, &FrameTimeWidget::framePicked, timeline_, &TimelineWidget::focusEvent);
-    plotsLayout->addWidget(timeline_,1,0);
+    plotsLayout->addWidget(timeline_,2,0);
     auto* scroll = new QScrollBar(Qt::Vertical); scroll->setObjectName("trackScrollBar");
-    scroll->setRange(0,0); scroll->setEnabled(false); scroll->setToolTip(QStringLiteral("上下滚动轨道")); plotsLayout->addWidget(scroll,1,1); plotsLayout->setColumnStretch(0,1); plotsLayout->setRowStretch(1,1); layout->addLayout(plotsLayout,1);
+    scroll->setRange(0,0); scroll->setEnabled(false); scroll->setToolTip(QStringLiteral("上下滚动轨道")); plotsLayout->addWidget(scroll,2,1); plotsLayout->setColumnStretch(0,1); plotsLayout->setRowStretch(2,1); layout->addLayout(plotsLayout,1);
     connect(scroll, &QScrollBar::valueChanged, timeline_, &TimelineWidget::setFirstTrack);
     connect(timeline_, &TimelineWidget::trackScrollChanged, scroll, [scroll](int first,int maximum,int page) {
         const QSignalBlocker blocker(scroll); scroll->setRange(0,maximum); scroll->setEnabled(maximum>0); scroll->setPageStep(page); scroll->setValue(first);
@@ -76,21 +81,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* filter = new QLineEdit; filter->setPlaceholderText(QStringLiteral("按轨道名称过滤")); filter->setObjectName("trackFilter"); tracksLayout->addWidget(filter);
     auto* tree = new QTreeWidget; tree->setObjectName("trackTree"); tree->setHeaderHidden(true); tree->setMinimumWidth(175); tracksLayout->addWidget(tree);
     tracksDock->setWidget(tracksPage); addDockWidget(Qt::LeftDockWidgetArea,tracksDock);
+    auto* framesDock = new QDockWidget(QStringLiteral("帧明细 / 分析导出"),this); framesDock->setObjectName("framesDock");
+    auto* framesPanel = new FrameDetailsPanel; framesDock->setWidget(framesPanel); addDockWidget(Qt::BottomDockWidgetArea,framesDock); framesDock->hide();
     auto* viewMenu = menuBar()->addMenu(QStringLiteral("视图"));
-    viewMenu->addAction(tracksDock->toggleViewAction()); viewMenu->addAction(detailDock->toggleViewAction());
+    viewMenu->addAction(tracksDock->toggleViewAction()); viewMenu->addAction(detailDock->toggleViewAction()); viewMenu->addAction(framesDock->toggleViewAction());
     auto range = std::make_shared<std::optional<TimeRange>>();
-    auto requestStats = [this,range,group,summary,longest,longTable,frameChart] {
+    auto sortState = std::make_shared<std::pair<FrameSort,bool>>(FrameSort::Start,false);
+    auto requestStats = [this,range,group,summary,longest,longTable,frameChart,heatmap,framesPanel,sortState] {
         statistics_.cancel(); longest->setEnabled(false); longTable->setRowCount(0);
+        framesPanel->setAnalysis({}); heatmap->setAnalysis({});
         const auto snapshot = controller_.snapshot(); if (!snapshot) return;
         auto tracks = timeline_->tracks();
         if (snapshot->frames) {
             const auto id = group->currentData().toUInt();
             tracks = std::find(tracks.begin(),tracks.end(),id) == tracks.end() ? std::vector<std::uint32_t>{} : std::vector<std::uint32_t>{id};
         }
-        frameChart->setVisible(snapshot->frames && !tracks.empty());
+        frameChart->setVisible(snapshot->frames && !tracks.empty()); heatmap->setVisible(snapshot->frames && !tracks.empty());
         if(snapshot->frames && !tracks.empty()) { frameChart->setData(snapshot, tracks.front()); frameChart->setRange(timeline_->visibleRange()); }
         summary->setPlainText(QStringLiteral("正在后台计算原始数据统计…"));
-        statistics_.request(snapshot, range->value_or(snapshot->bounds), std::move(tracks));
+        statistics_.request(snapshot, range->value_or(snapshot->bounds), std::move(tracks),sortState->first,sortState->second);
     };
     auto filterTracks = [this,tree,filter,range,requestStats] {
         std::vector<std::uint32_t> visible;
@@ -110,15 +119,31 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(tree,&QTreeWidget::itemCollapsed,this,[filterTracks] { filterTracks(); });
     connect(tree,&QTreeWidget::itemExpanded,this,[filterTracks] { filterTracks(); });
     connect(group,&QComboBox::currentIndexChanged,this,[requestStats] { requestStats(); });
-    connect(timeline_,&TimelineWidget::selectionCleared,this,[this,range,detail,longest,summary,longTable] {
-        statistics_.cancel(); range->reset(); longest->setEnabled(false);
-        summary->setPlainText(QStringLiteral("选区已清除，重新框选或调整轨道过滤以计算统计。")); longTable->setRowCount(0);
+    connect(timeline_,&TimelineWidget::selectionCleared,this,[range,detail,requestStats] {
+        range->reset(); requestStats();
         detail->setPlainText(QStringLiteral("当前没有选中事件。点击事件查看详情，或框选后查看统计。"));
+    });
+    connect(framesPanel,&FrameDetailsPanel::sortRequested,this,[sortState,requestStats](int column,bool descending) {
+        sortState->first=static_cast<FrameSort>(column); sortState->second=descending; requestStats();
+    });
+    connect(framesPanel,&FrameDetailsPanel::eventSelected,timeline_,&TimelineWidget::selectEvent);
+    connect(framesPanel,&FrameDetailsPanel::eventActivated,timeline_,&TimelineWidget::focusEvent);
+    connect(timeline_,&TimelineWidget::eventPicked,framesPanel,[framesPanel](qulonglong id,const QString&) { if(id) framesPanel->selectId(id); });
+    connect(framesPanel,&FrameDetailsPanel::cancelExport,&exports_,&ExportController::cancel);
+    connect(&exports_,&ExportController::progressChanged,framesPanel,&FrameDetailsPanel::setExportProgress);
+    connect(&exports_,&ExportController::busyChanged,framesPanel,&FrameDetailsPanel::setExportBusy);
+    connect(framesPanel,&FrameDetailsPanel::exportRequested,this,[this,framesPanel](ExportFormat format,const QString& notes) {
+        const auto analysis=framesPanel->analysis(); if(!analysis) return;
+        const bool markdown=format==ExportFormat::Markdown;
+        const auto path=QFileDialog::getSaveFileName(this,QStringLiteral("导出当前帧分析（仅本地）"),markdown?"analysis.md":"analysis.csv",markdown?"Markdown (*.md)":"CSV (*.csv)");
+        if(!path.isEmpty()) exports_.request(path,analysis,format,notes,controller_.sourcePath());
     });
     connect(timeline_,&TimelineWidget::eventPicked,this,[detail,tabs](qulonglong,const QString& text) { detail->setPlainText(text); tabs->setCurrentIndex(0); });
     connect(timeline_,&TimelineWidget::rangeSelected,this,[range,requestStats,tabs](qint64 a,qint64 b) { *range=TimeRange{a,b}; requestStats(); tabs->setCurrentIndex(1); });
     connect(&statistics_,&StatisticsController::failed,summary,&QTextBrowser::setPlainText);
-    connect(&statistics_,&StatisticsController::ready,this,[this,range,summary,longest,longTable] {
+    connect(&statistics_,&StatisticsController::ready,this,[this,range,summary,longest,longTable,framesPanel,heatmap] {
+        framesPanel->setAnalysis(statistics_.frameDetails()); heatmap->setAnalysis(statistics_.frameDetails());
+        if(const auto selected=timeline_->selectedEvent()) framesPanel->selectId(selected->id);
         const auto& stats=statistics_.result(); const bool frames=controller_.snapshot()->frames;
         QString text = range->has_value() ? QStringLiteral("选区 [%1, %2) ms\n").arg(double((*range)->begin)/1e6).arg(double((*range)->end)/1e6) : QStringLiteral("全会话 / 当前显示轨道\n");
         text += frames ? QStringLiteral("单进程/交换链；按Present时间归属，完整帧间隔\n") : QStringLiteral("相交事件；时长裁剪到选区，并发求和可超过墙钟时间\n");
@@ -142,13 +167,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(timeline_,&TimelineWidget::diagnosticsChanged,diagnostics,&QLabel::setText);
     connect(&controller_,&SessionController::progressChanged,progress,[progress](int value) { if(value>0) { progress->setRange(0,100); progress->setValue(value); } });
     auto* state = new QLabel(QStringLiteral("空会话")); statusBar()->addWidget(state);
+    connect(&exports_,&ExportController::message,this,[state](const QString& text) { state->setText(text); });
+    connect(&exports_,&ExportController::completed,this,[state](const QString& path) { state->setText(QStringLiteral("已导出发起时的分析：%1").arg(QFileInfo(path).fileName())); });
     connect(&controller_,&SessionController::message,this,[state](const QString& text) { state->setText(text); });
     connect(&controller_,&SessionController::busyChanged,this,[cancel,progress,state](bool busy) {
         cancel->setEnabled(busy); if(busy) { state->setText(QStringLiteral("后台加载中 · 可取消")); progress->setRange(0,0); }
         else { progress->setRange(0,100); progress->setValue(0); if(state->text().startsWith(QStringLiteral("后台"))) state->setText(QStringLiteral("就绪")); }
     });
-    connect(&controller_,&SessionController::snapshotReady,this,[this,heading,legend,tree,group,filter,range,detail,sourceInfo,state,requestStats] {
-        const auto snapshot=controller_.snapshot(); statistics_.cancel(); range->reset(); timeline_->setSnapshot(snapshot);
+    connect(&controller_,&SessionController::snapshotReady,this,[this,heading,legend,tree,group,filter,range,detail,sourceInfo,state,requestStats,framesPanel,framesDock] {
+        const auto snapshot=controller_.snapshot(); statistics_.cancel(); range->reset(); framesPanel->resetSession(); framesDock->setVisible(snapshot->frames); timeline_->setSnapshot(snapshot);
         heading->setText(QStringLiteral("%1 · %2 条记录 · %3 轨道 · 加载 %4 ms").arg(snapshot->synthetic?QStringLiteral("教学模拟 seed 42"):QStringLiteral("外部PresentMon帧CSV（来源真实性由采集记录确认）")).arg(snapshot->eventCount).arg(snapshot->tracks.size()).arg(controller_.loadMs(),0,'f',1));
         legend->setText(snapshot->frames ? QStringLiteral("帧矩形宽度：前一Present间隔（非GPU执行时长） | 金框：选中 | 长帧可在统计页定位") : QStringLiteral("<span style=\"color:#67a6e8\">■ CPU</span> <span style=\"color:#3cd7b1\">■ GPU</span> 金框：选中 | 概览桶计数 <span style=\"color:#20554f\">■ 1</span> <span style=\"color:#257562\">■ 4</span> <span style=\"color:#2f9d82\">■ 16</span> <span style=\"color:#39caa7\">■ 64+</span>（对数亮度，非利用率）"));
         const QSignalBlocker bt(tree), bg(group), bf(filter); tree->clear(); group->clear(); filter->clear();
@@ -161,7 +188,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             if(snapshot->frames) group->addItem(name,i);
         }
         if(!snapshot->frames) group->addItem(QStringLiteral("当前显示的教学轨道"));
-        QString source=QString::fromStdString(snapshot->source)+"\n";
+        QString source=QString::fromStdString(snapshot->source)+"\nSHA-256: "+QString::fromStdString(snapshot->input.sha256)+"\n";
         for(const auto& warning:snapshot->warnings) source+=QString::fromStdString(warning)+"\n";
         sourceInfo->setPlainText(source); detail->setPlainText(source+QStringLiteral("\n点击事件查看原始记录。")); state->setText(QStringLiteral("加载完成")); requestStats();
     });

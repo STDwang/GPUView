@@ -7,8 +7,26 @@
 #include <map>
 #include <sstream>
 #include <tuple>
+#include <QCryptographicHash>
 namespace gpuview {
 namespace {
+// 对同一次解析所读取的字节做哈希，避免先哈希再打开导致文件变更时摘要与内容不一致。
+class HashingBuffer : public std::streambuf {
+public:
+    HashingBuffer(std::istream& source, QCryptographicHash& hash, CancelFlag cancel)
+        : source_(source), hash_(hash), cancel_(std::move(cancel)) {}
+protected:
+    int_type underflow() override {
+        if(gptr() && gptr()<egptr()) return traits_type::to_int_type(*gptr());
+        checkCancelled(cancel_); source_.read(buffer_,sizeof(buffer_)); const auto count=source_.gcount();
+        if(source_.bad()) throw std::runtime_error("CSV read failed");
+        if(!count) return traits_type::eof();
+        hash_.addData(QByteArrayView(buffer_,qsizetype(count)));
+        setg(buffer_,buffer_,buffer_+count); return traits_type::to_int_type(*gptr());
+    }
+private:
+    std::istream& source_; QCryptographicHash& hash_; CancelFlag cancel_; char buffer_[8192];
+};
 // 逐记录读取，带引号字段可跨行；长记录限制和取消点防止损坏文件拖住退出。
 bool record(std::istream& in, std::vector<std::string>& fields, const CancelFlag& cancel) {
     fields.clear(); std::string field; bool quoted = false, closed = false, any = false; char c; std::size_t bytes = 0;
@@ -41,7 +59,7 @@ TimeNs number(const std::string& s, long double scale) {
     return TimeNs(std::llround(v * scale));
 }
 }
-Snapshot readPresentMon(std::istream& input, std::uint64_t version, const CancelFlag& cancel, const Progress& progress) {
+Snapshot readPresentMon(std::istream& input, std::uint64_t version, const CancelFlag& cancel, const Progress& progress, const std::function<std::string()>& digest) {
     checkCancelled(cancel);
     if (input.peek() == 0xef) { char bom[3]{}; input.read(bom, 3); if (std::string(bom, 3) != "\xef\xbb\xbf") throw std::runtime_error("Invalid BOM"); }
     std::vector<std::string> fields;
@@ -87,13 +105,16 @@ Snapshot readPresentMon(std::istream& input, std::uint64_t version, const Cancel
     warnings.push_back("有效 " + std::to_string(events.size()) + " / 排除 " + std::to_string(rejected) +
         " / 相邻重复时间 " + std::to_string(duplicates) + " / 无序记录 " + std::to_string(unordered));
     warnings.push_back("全部有效应用Present间隔，未筛选Dropped。矩形锚定当前Present，宽度编码前一间隔，不是GPU执行区间。");
+    SourceInfo sourceInfo{digest ? digest() : std::string(), events.size()+rejected, rejected};
     if (progress) progress(50);
     return buildStore(std::move(events), std::move(tracks), {"Present间隔"}, version, cancel, progress,
-        false, true, "PresentMon v1字段 / TimeInSeconds + MsBetweenPresents / 原点(ns)=" + std::to_string(origin), std::move(warnings));
+        false, true, "PresentMon v1字段 / TimeInSeconds + MsBetweenPresents / 原点(ns)=" + std::to_string(origin), std::move(warnings), std::move(sourceInfo));
 }
 Snapshot loadPresentMon(const std::filesystem::path& path, std::uint64_t version, const CancelFlag& cancel, const Progress& progress) {
     std::ifstream input(path, std::ios::binary);
     if (!input) throw std::runtime_error("Cannot open PresentMon CSV");
-    return readPresentMon(input, version, cancel, progress);
+    QCryptographicHash hash(QCryptographicHash::Sha256); HashingBuffer buffer(input,hash,cancel);
+    std::istream parsed(&buffer); parsed.exceptions(std::ios::badbit);
+    return readPresentMon(parsed, version, cancel, progress, [&hash] { return hash.result().toHex().toStdString(); });
 }
 }

@@ -14,6 +14,8 @@ public:
     const std::vector<std::uint32_t>& tracks() const { return tracks_; }
     void zoomSelection();
     void previousView();
+    void selectEvent(const Event& event);
+    void selectRange(TimeRange range);
     void focusEvent(const Event& event);
     void showRange(TimeRange range);
     std::optional<Event> selectedEvent() const { return selectedEvent_; }
