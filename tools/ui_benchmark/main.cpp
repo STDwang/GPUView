@@ -1,3 +1,5 @@
+/// @file tools/ui_benchmark/main.cpp
+/// @brief 教学Trace的离屏交互与缓存消融基准；记录CPU完成绘制，不包含OS排队或屏幕呈现。
 #include "ui_widgets/timeline_widget.h"
 #include "adapters/synthetic_source.h"
 #include <QApplication>
@@ -14,6 +16,7 @@
 #include <psapi.h>
 #endif
 using namespace gpuview;
+/// 教学Trace的离屏交互与缓存消融基准；记录CPU完成绘制，不包含OS排队或屏幕呈现。
 int main(int argc,char** argv) {
     QApplication app(argc,argv);
 #ifdef _WIN32

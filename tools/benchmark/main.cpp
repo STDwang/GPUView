@@ -1,3 +1,5 @@
+/// @file tools/benchmark/main.cpp
+/// @brief 查询算法基准：同批请求对照朴素扫描与索引，预热后重复测量并校验命中数。
 #include "adapters/synthetic_source.h"
 #include "core/render_query.h"
 #include <algorithm>
@@ -12,7 +14,9 @@
 #endif
 using namespace gpuview;
 using Clock = std::chrono::steady_clock;
+/// 将steady_clock起点到当前的时间差转换为毫秒，用于查询基准计时。
 static double ms(Clock::time_point begin) { return std::chrono::duration<double, std::milli>(Clock::now() - begin).count(); }
+/// 查询算法基准：同批请求对照朴素扫描与索引，预热后重复测量并校验命中数。
 int main(int argc, char** argv) {
     std::ofstream file(argc > 1 ? argv[1] : "benchmark.csv");
     if (!file) { std::cerr << "Cannot write results\n"; return 1; }

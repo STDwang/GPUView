@@ -1,4 +1,18 @@
-﻿param(
+﻿<#
+.SYNOPSIS
+定位独立Qt SDK与VS2022工具链，同步根目录工程浏览列表，构建、部署并验证GPUView。
+.PARAMETER QtRoot
+Qt安装根目录；为空使用仓库本地.tools路径，相对路径按仓库根解析，不写入公开工程。
+.PARAMETER Configuration
+Debug用于IDE调试，Release用于性能测量；默认Release。
+.PARAMETER Action
+Build增量构建，Rebuild先清理，Clean仅清理构建目标。
+.PARAMETER SkipTests
+仅跳过本轮测试，不代表已有测试结果仍有效；正常开发默认执行测试。
+.NOTES
+失败立即停止；只部署到本机构建目录，不上传SDK和运行时DLL。
+#>
+param(
     [string]$QtRoot = '',
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',

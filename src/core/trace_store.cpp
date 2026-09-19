@@ -1,8 +1,11 @@
+/// @file src/core/trace_store.cpp
+/// @brief 纳秒数据契约、只读快照、区间索引与有界待办；核心层不依赖Qt或界面线程。
 #include "core/trace_store.h"
 #include <algorithm>
 #include <limits>
 
 namespace gpuview {
+/// 接管事件数组，校验后按start/ID排序并建立子树最大终点；构建支持取消。
 IntervalIndex::IntervalIndex(std::vector<Event> events, const CancelFlag& cancel)
     : events_(std::move(events)) {
     for (std::size_t i = 0; i < events_.size(); ++i) {
@@ -12,6 +15,7 @@ IntervalIndex::IntervalIndex(std::vector<Event> events, const CancelFlag& cancel
             throw std::invalid_argument("invalid interval");
     }
     std::size_t comparisons = 0;
+    // 排序比较器以start为主、ID为稳定次键，并定期检查取消，避免大排序无法退出。
     std::sort(events_.begin(), events_.end(), [&](const Event& a, const Event& b) {
         if (++comparisons % 4096 == 0) checkCancelled(cancel);
         return a.start < b.start || (a.start == b.start && a.id < b.id);
@@ -19,12 +23,14 @@ IntervalIndex::IntervalIndex(std::vector<Event> events, const CancelFlag& cancel
     maxEnd_.resize(events_.size() * 4);
     if (!events_.empty()) build(1, 0, events_.size(), cancel);
 }
+/// 递归构建[lo,hi)子树最大终点，node是数组树节点编号；分批检查取消。
 TimeNs IntervalIndex::build(std::size_t node, std::size_t lo, std::size_t hi, const CancelFlag& cancel) {
     if (node % 4096 == 0) checkCancelled(cancel);
     if (hi - lo == 1) return maxEnd_[node] = events_[lo].end();
     const auto mid = lo + (hi - lo) / 2;
     return maxEnd_[node] = std::max(build(node * 2, lo, mid, cancel), build(node * 2 + 1, mid, hi, cancel));
 }
+/// 查询与半开range相交的事件，最多limit条；额外命中置truncated，返回指针借用索引存储。
 QueryResult IntervalIndex::query(TimeRange range, std::size_t limit) const {
     QueryResult out;
     if (range.end <= range.begin || events_.empty()) return out;
@@ -32,6 +38,7 @@ QueryResult IntervalIndex::query(TimeRange range, std::size_t limit) const {
     visit(1, 0, events_.size(), range, limit, out);
     return out;
 }
+/// 查询[lo,hi)子树并累积out；利用maxEnd安全剪枝，避免漏掉跨视口长事件。
 void IntervalIndex::visit(std::size_t node, std::size_t lo, std::size_t hi, TimeRange range,
                           std::size_t limit, QueryResult& out) const {
     ++out.visitedNodes;
@@ -45,6 +52,7 @@ void IntervalIndex::visit(std::size_t node, std::size_t lo, std::size_t hi, Time
     visit(node * 2, lo, mid, range, limit, out);
     visit(node * 2 + 1, mid, hi, range, limit, out);
 }
+/// 接管事件与名称，分轨建索引和概览后发布const快照；来源/质量随数据保存，失败不发布半成品。
 Snapshot buildStore(std::vector<Event> events, std::vector<std::string> trackNames,
                     std::vector<std::string> names, std::uint64_t version,
                     const CancelFlag& cancel, const Progress& progress, bool synthetic, bool frames,

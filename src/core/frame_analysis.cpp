@@ -1,16 +1,22 @@
+/// @file src/core/frame_analysis.cpp
+/// @brief 完整帧分析数据契约及计算：行引用排序、稳定ID映射、稀疏热力图与有界概览。
 #include "core/frame_analysis.h"
 #include <algorithm>
 #include <limits>
 #include <cmath>
 namespace gpuview {
+/// 按排序行索引借用源事件；越界抛异常，引用有效期依赖源快照。
 const Event& FrameAnalysis::event(std::size_t row) const {
     const auto& ref = rows.at(row); return source->tracks.at(ref.track).index.events().at(ref.index);
 }
+/// 按稳定事件ID查当前排序行，不存在返回-1，避免跨排序沿用行号。
 int FrameAnalysis::rowForId(std::uint64_t id) const {
     const auto it = std::lower_bound(idRows.begin(), idRows.end(), id,
+        // ID映射已按ID排序，比较器仅检查键，查找复杂度为对数级。
         [](const auto& pair, auto value) { return pair.first < value; });
     return it != idRows.end() && it->first == id ? it->second : -1;
 }
+/// 后台生成单帧组的范围统计、排序行索引、ID映射和全会话热力概览；支持取消，结果只读。
 FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std::uint32_t> tracks,
     FrameSort sort, bool descending, const CancelFlag& cancel) {
     if (!source || !source->frames || tracks.size() > 1) throw std::invalid_argument("single frame group required");
@@ -37,6 +43,7 @@ FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std
         const int last=std::clamp(int(std::ceil((end-bounds.begin)*scale))-1,first,columns-1);
         for(int x=first;x<=last;++x) out->heatOverview[std::size_t(x)]=std::max(out->heatOverview[std::size_t(x)],bin.maximum);
     }
+    // 把行引用转换为排序键，不移动或改写快照中的原始事件。
     auto key = [&](const FrameRow& row) -> std::uint64_t {
         const auto& e=out->source->tracks[row.track].index.events()[row.index];
         switch(sort) {
@@ -47,6 +54,7 @@ FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std
         }
     };
     std::size_t comparisons=0;
+    // 只排序轻量行引用；主键方向由用户指定，同值以稳定ID确定顺序并支持取消。
     std::sort(out->rows.begin(),out->rows.end(),[&](const auto& a,const auto& b) {
         if(++comparisons%4096==0) checkCancelled(cancel);
         const auto x=key(a), y=key(b);
@@ -59,6 +67,7 @@ FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std
         if(i%1024==0) checkCancelled(cancel);
         out->idRows.emplace_back(out->event(i).id,int(i));
     }
+    // 为按ID恢复选择建立二分查找顺序，比较期间保留取消检查点。
     std::sort(out->idRows.begin(),out->idRows.end(),[&](const auto& a,const auto& b) {
         if(++comparisons%4096==0) checkCancelled(cancel); return a.first<b.first;
     });

@@ -1,3 +1,5 @@
+/// @file tools/frame_benchmark/main.cpp
+/// @brief 帧分析/完整表格基准及公开样本报告验证；百万数据是合成帧，内存是进程累计峰值。
 #include "core/frame_analysis.h"
 #include "adapters/presentmon_csv.h"
 #include "adapters/analysis_export.h"
@@ -16,6 +18,7 @@
 #include <psapi.h>
 #endif
 using namespace gpuview;
+/// 帧分析/完整表格基准及公开样本报告验证；百万数据是合成帧，内存是进程累计峰值。
 int main(int argc,char** argv) {
     QApplication app(argc,argv); const auto args=app.arguments(); if(args.size()<4) return 1;
 #ifdef _WIN32

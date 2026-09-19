@@ -1,3 +1,5 @@
+/// @file tools/capture_target/main.cpp
+/// @brief 受控D3D11采集目标；主动注入长帧用于演示，不能据此推断真实游戏GPU瓶颈。
 // 可重复采集目标：真实D3D11 Present，每60帧主动延迟70ms，便于验证长帧定位。
 #define NOMINMAX
 #include <windows.h>
@@ -5,10 +7,12 @@
 #include <wrl/client.h>
 #include <chrono>
 using Microsoft::WRL::ComPtr;
+/// 处理采集目标销毁消息，其余交给Win32默认窗口过程。
 LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM w, LPARAM l) {
     if(message==WM_DESTROY) { PostQuitMessage(0); return 0; }
     return DefWindowProcW(window,message,w,l);
 }
+/// 创建受控D3D11呈现目标并周期性注入70ms等待，用于帧采集，不代表真实游戏GPU瓶颈。
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
     WNDCLASSW type{}; type.hInstance=instance; type.lpfnWndProc=windowProc; type.lpszClassName=L"GPUViewCaptureTarget";
     RegisterClassW(&type);

@@ -1,12 +1,16 @@
+/// @file src/core/render_query.cpp
+/// @brief 可见几何查询、LOD、单项几何缓存和时间视口；不依赖Qt，方便独立验证。
 #include "core/render_query.h"
 #include <algorithm>
 #include <cmath>
 
 namespace gpuview {
+/// 比较组成状态的全部字段，用于时间范围一致性或完整缓存键判等。
 bool RenderKey::operator==(const RenderKey& other) const {
     return version == other.version && range == other.range && width == other.width &&
            firstTrack == other.firstTrack && trackCount == other.trackCount && trackIds == other.trackIds;
 }
+/// 根据时间/轨道/宽度生成几何；密集数据用有界概览，近似图元不用于精确统计。
 RenderBatch makeRenderBatch(const TraceStore& store, const RenderKey& key) {
     RenderBatch out;
     if (key.width <= 0 || key.range.end <= key.range.begin) return out;
@@ -46,6 +50,7 @@ RenderBatch makeRenderBatch(const TraceStore& store, const RenderKey& key) {
     }
     return out;
 }
+/// 同快照同键复用几何，否则重建；返回引用在下一次get或clear后可能失效。
 const RenderBatch& RenderCache::get(const Snapshot& store, const RenderKey& key) {
     if (!store) throw std::invalid_argument("snapshot required");
     if (owner_ == store && key_ && *key_ == key) { ++hits_; return batch_; }
@@ -55,16 +60,20 @@ const RenderBatch& RenderCache::get(const Snapshot& store, const RenderKey& key)
     ++misses_;
     return batch_;
 }
+/// 释放缓存快照、键和几何；保留累计命中计数供诊断。
 void RenderCache::clear() { owner_.reset(); key_.reset(); batch_ = {}; }
+/// 重设总边界并恢复全览；负起点、空或反向范围抛invalid_argument。
 void TimeViewport::reset(TimeRange bounds) {
     if (bounds.begin < 0 || bounds.end <= bounds.begin) throw std::invalid_argument("invalid bounds");
     bounds_ = range_ = bounds;
 }
+/// 统一夹紧起点与时长，避免缩放和平移越过全会话边界。
 void TimeViewport::set(TimeNs begin, TimeNs duration) {
     duration = std::clamp(duration, TimeNs(1), bounds_.end - bounds_.begin);
     begin = std::clamp(begin, bounds_.begin, bounds_.end - duration);
     range_ = {begin, begin + duration};
 }
+/// 按factor缩放时长，尽量保持相对位置anchor所指时刻不变；非法参数忽略。
 void TimeViewport::zoom(double factor, double anchor) {
     if (!std::isfinite(factor) || factor <= 0 || !std::isfinite(anchor)) return;
     anchor = std::clamp(anchor, 0.0, 1.0);
@@ -72,6 +81,7 @@ void TimeViewport::zoom(double factor, double anchor) {
     const auto length = TimeNs(std::clamp(double(old) / factor, 1.0, double(bounds_.end - bounds_.begin)));
     set(range_.begin + TimeNs(double(old - length) * anchor), length);
 }
+/// 按当前可见时长的fraction平移，最终范围夹紧到数据边界。
 void TimeViewport::pan(double fraction) {
     if (!std::isfinite(fraction)) return;
     const auto length = range_.end - range_.begin;

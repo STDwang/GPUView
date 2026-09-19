@@ -1,4 +1,15 @@
-﻿param([string]$PresentMon = '', [int]$Seconds = 8)
+﻿<#
+.SYNOPSIS
+用固定哈希的PresentMon版本采集本项目新启动的受控D3D11目标，并保存本地来源清单。
+.PARAMETER PresentMon
+PresentMon 1.9.2 x64可执行文件路径；为空使用.tools内的约定位置。
+.PARAMETER Seconds
+采集秒数，限定1到15秒，避免超过目标程序自动退出时限。
+.NOTES
+只采集新目标PID；原始CSV和带本地PID/时间的manifest放data/raw，不自动公开。
+主动注入长帧是实验条件，不能作为真实游戏GPU瓶颈证据。
+#>
+param([string]$PresentMon = '', [int]$Seconds = 8)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 if ($Seconds -lt 1 -or $Seconds -gt 15) { throw 'Seconds must be between 1 and 15 (target exits at 20 seconds).' }

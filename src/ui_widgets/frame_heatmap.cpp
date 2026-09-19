@@ -1,3 +1,5 @@
+/// @file src/ui_widgets/frame_heatmap.cpp
+/// @brief 全会话1秒最大帧间隔概览；GUI只读取后台投影数据，点击发出精确秒桶选区。
 #include "ui_widgets/frame_heatmap.h"
 #include <QPainter>
 #include <QMouseEvent>
@@ -5,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 namespace gpuview {
+/// 把横坐标映射为会话内1秒桶的半开纳秒范围；无数据时返回空范围。
 TimeRange FrameHeatmap::bucketAt(int x) const {
     if(!analysis_) return {0,0};
     const auto bounds=analysis_->source->bounds;
@@ -13,6 +16,7 @@ TimeRange FrameHeatmap::bucketAt(int x) const {
     const auto begin=time/1000000000*1000000000;
     return {begin,begin+std::min<TimeNs>(1000000000,bounds.end-begin)};
 }
+/// 将后台max概览压到有限像素宽度；缺失画N/A，颜色表示帧间隔而非GPU利用率。
 void FrameHeatmap::paintEvent(QPaintEvent*) {
     QPainter p(this); p.fillRect(rect(),QColor("#15212d")); p.setPen(QColor("#b9cbd9"));
     p.drawText(10,18,QStringLiteral("全会话热力图 · 1秒桶最大帧间隔概览（ms） · 点击选区"));
@@ -35,14 +39,17 @@ void FrameHeatmap::paintEvent(QPaintEvent*) {
     p.drawRect(QRectF(150+(analysis_->range.begin-bounds.begin)*scale,26,
         (analysis_->range.end-analysis_->range.begin)*scale,24));
 }
+/// 将有效左击映射为1秒桶选区并发出rangePicked，不修改全会话热力数据。
 void FrameHeatmap::mousePressEvent(QMouseEvent* event) {
     if(event->button()!=Qt::LeftButton || event->position().x()<150 || event->position().y()<27 || event->position().y()>49) return;
     const auto range=bucketAt(int(event->position().x()));
     if(range.end>range.begin) emit rangePicked(range.begin,range.end);
 }
+/// 按鼠标时刻查原始稀疏秒桶显示数量/max，区分精确桶值与概览像素聚合。
 void FrameHeatmap::mouseMoveEvent(QMouseEvent* event) {
     if(!analysis_ || event->position().x()<150) return;
     const auto range=bucketAt(int(event->position().x()));
+    // 稀疏秒桶按起点有序；二分查询鼠标所指原始桶，不把概览像素误作单桶统计。
     const auto it=std::lower_bound(analysis_->heat.begin(),analysis_->heat.end(),range.begin,[](const HeatBin& b,TimeNs t) { return b.begin<t; });
     const QString value=it==analysis_->heat.end() || it->begin!=range.begin ? QStringLiteral("N/A（无有效帧）") :
         QStringLiteral("最大 %1 ms / %2 帧").arg(double(it->maximum)/1e6,0,'f',3).arg(it->count);

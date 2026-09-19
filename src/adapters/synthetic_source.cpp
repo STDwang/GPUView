@@ -1,6 +1,9 @@
+/// @file src/adapters/synthetic_source.cpp
+/// @brief 固定seed教学事件发生器；为索引、渲染和测试提供可复现数据，不代表实际GPU采集。
 #include "adapters/synthetic_source.h"
 #include <random>
 namespace gpuview {
+/// 用固定seed生成count条教学事件并建索引；携带version并支持进度/取消，不能当真实GPU采集。
 Snapshot generateTrace(std::size_t count, std::uint64_t version,
                        const CancelFlag& cancel, const Progress& progress) {
     if (count == 0 || count > 1000000) throw std::invalid_argument("count must be in [1,1000000]");

@@ -1,3 +1,5 @@
+# GPUView构建入口：按模块目录收集源文件，隔离应用/测试/基准各自的main。
+# 公开VS工程只是相对路径的调试入口，实际编译目标和依赖关系由这里统一维护。
 cmake_minimum_required(VERSION 3.21)
 project(GPUView VERSION 0.3.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
@@ -8,6 +10,7 @@ if(MSVC)
 else()
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
+# Widgets负责桌面UI，Core用于任务/原子导出适配，Test只用于回归目标。
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Test)
 enable_testing()
 include(cmake/CollectSources.cmake)
@@ -20,6 +23,7 @@ gpuview_collect_sources(core_test_sources tests/core)
 gpuview_collect_sources(ui_test_sources tests/ui)
 gpuview_collect_sources(benchmark_sources tools/benchmark)
 
+# 分层依赖自下而上；core关闭AUTOMOC并保持不依赖Qt。
 add_library(gpuview_core ${core_sources})
 target_include_directories(gpuview_core PUBLIC src)
 set_target_properties(gpuview_core PROPERTIES AUTOMOC OFF)
@@ -37,6 +41,7 @@ target_link_libraries(gpuview_widgets PUBLIC gpuview_application Qt6::Widgets)
 qt_add_executable(GPUView WIN32 ${app_sources})
 target_link_libraries(GPUView PRIVATE gpuview_widgets)
 
+# 测试保留控制台输出，日志按配置区分，避免Debug/Release互相覆盖证据。
 qt_add_executable(gpuview_tests ${core_test_sources})
 set_target_properties(gpuview_tests PROPERTIES WIN32_EXECUTABLE FALSE)
 target_link_libraries(gpuview_tests PRIVATE gpuview_application Qt6::Test)
@@ -52,6 +57,7 @@ if(WIN32)
     "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::Core>/../plugins/platforms")
 endif()
 
+# 性能工具是独立程序，不把测量代码放进用户应用路径；psapi只用于Windows内存计数。
 add_executable(gpuview_benchmark ${benchmark_sources})
 target_link_libraries(gpuview_benchmark PRIVATE gpuview_adapters)
 if(WIN32)

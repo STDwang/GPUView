@@ -1,3 +1,5 @@
+/// @file src/ui_widgets/timeline_widget.cpp
+/// @brief 自绘多轨时间轴、缩放/平移/选择、轨道滚动及诊断；不可变源数据与交互状态分离。
 #include "ui_widgets/timeline_widget.h"
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -8,11 +10,13 @@
 #include <algorithm>
 #include <cmath>
 namespace gpuview {
+/// 初始化自绘时间轴的输入/焦点策略，源数据由不可变快照拥有。
 TimelineWidget::TimelineWidget(QWidget* parent) : QWidget(parent) {
     setMinimumSize(480, 240);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 }
+/// 绑定新会话并清理旧选择、历史和缓存，重新建立轨道显示映射。
 void TimelineWidget::setSnapshot(Snapshot snapshot) {
     snapshot_ = std::move(snapshot);
     firstTrack_ = 0;
@@ -23,11 +27,13 @@ void TimelineWidget::setSnapshot(Snapshot snapshot) {
     syncTrackScroll(0);
     resetViewport(); history_.clear();
 }
+/// 保存时间视口，重复范围不追加；最多64项避免历史无界增长。
 void TimelineWidget::rememberView() {
     if (!history_.empty() && history_.back() == viewport_.range()) return;
     if (history_.size() == 64) history_.erase(history_.begin());
     history_.push_back(viewport_.range());
 }
+/// 替换可见轨道ID映射并使缓存失效；过滤后行号不等于源轨道ID。
 void TimelineWidget::setTracks(std::vector<std::uint32_t> tracks) {
     tracks_.clear();
     if (snapshot_) for (auto id : tracks) if (id < snapshot_->tracks.size() && std::find(tracks_.begin(), tracks_.end(), id) == tracks_.end()) tracks_.push_back(id);
@@ -35,51 +41,63 @@ void TimelineWidget::setTracks(std::vector<std::uint32_t> tracks) {
     selectedEvent_.reset(); selection_.reset(); emit selectionCleared();
     syncTrackScroll(0); update();
 }
+/// 保存旧视图后显示指定范围，发布viewportChanged同步曲线。
 void TimelineWidget::showRange(TimeRange range) {
     if (!snapshot_) return;
     rememberView(); viewport_.show(range); emit viewportChanged(viewport_.range().begin, viewport_.range().end); update();
 }
+/// 存在有效框选时缩放至选区，通过showRange保存返回视图。
 void TimelineWidget::zoomSelection() { if (selection_) showRange(*selection_); }
+/// 恢复最近保存的时间视口；没有历史时保持当前范围。
 void TimelineWidget::previousView() {
     if (history_.empty()) return;
     viewport_.show(history_.back()); history_.pop_back(); emit viewportChanged(viewport_.range().begin, viewport_.range().end); update();
 }
+/// 高亮事件、滚到对应轨道并发布详情；不改变时间缩放。
 void TimelineWidget::selectEvent(const Event& event) {
     const auto it = std::find(tracks_.begin(), tracks_.end(), event.track);
     if (it == tracks_.end()) return;
     setFirstTrack(int(it - tracks_.begin())); selectedEvent_ = event; publishEvent(event);
     update();
 }
+/// 清除事件选择，设置纳秒选区并缩放，随后发布统计请求。
 void TimelineWidget::selectRange(TimeRange range) {
     if(!snapshot_ || range.end<=range.begin) return;
     selectedEvent_.reset(); selection_=range;
     showRange(range); emit rangeSelected(range.begin,range.end); update();
 }
+/// 选中事件并缩放到其附近，供明细激活和最长事件导航。
 void TimelineWidget::focusEvent(const Event& event) {
     if(!snapshot_ || std::find(tracks_.begin(),tracks_.end(),event.track)==tracks_.end()) return;
     selectEvent(event);
     showRange({std::max<TimeNs>(0, event.start - event.duration / 2), event.end() + std::min(event.duration / 2, snapshot_->bounds.end - event.end())});
     update();
 }
+/// 把纵坐标映射为源轨道ID；超出绘图区或显示映射返回-1。
 int TimelineWidget::trackAt(int y) const {
     if (y < top || (y - top) / row >= visibleTrackCount()) return -1;
     const auto index = firstTrack_ + std::uint32_t((y - top) / row);
     return index < tracks_.size() ? int(tracks_[index]) : -1;
 }
+/// 清除悬停并调用基类，避免鼠标离开后残留高亮。
 void TimelineWidget::leaveEvent(QEvent* event) { hover_ = {-1, -1}; update(); QWidget::leaveEvent(event); }
+/// 恢复全会话并清除选择，发布范围变化同步其他图表和统计。
 void TimelineWidget::resetViewport() {
     rememberView();
     if (snapshot_) { viewport_.reset(snapshot_->bounds); emit viewportChanged(viewport_.range().begin, viewport_.range().end); }
     selection_.reset(); selectedEvent_.reset(); emit selectionCleared();
     update();
 }
+/// 设置过滤后列表的首个可见行，内部夹紧滚动范围并重绘。
 void TimelineWidget::setFirstTrack(int track) {
     syncTrackScroll(track);
     update();
 }
+/// 按可用高度计算可见行数，至少保留一行以稳定滚动边界。
 int TimelineWidget::visibleTrackCount() const {
     return std::max(1, (height() - top) / row);
 }
+/// 夹紧请求首行并发布滚动参数，统一尺寸变化、过滤和手动滚动的边界处理。
 void TimelineWidget::syncTrackScroll(int requestedTrack) {
     const int pageStep = visibleTrackCount();
     const int maximum = std::max(0, int(tracks_.size()) - pageStep);
@@ -87,10 +105,12 @@ void TimelineWidget::syncTrackScroll(int requestedTrack) {
     firstTrack_ = std::uint32_t(std::clamp(requestedTrack, 0, maximum));
     emit trackScrollChanged(int(firstTrack_), maximum, pageStep);
 }
+/// 保留Qt尺寸处理并重算可见轨道数，随高度更新滚动范围。
 void TimelineWidget::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     syncTrackScroll(int(firstTrack_));
 }
+/// GUI线程绘制可见数据与覆盖层，不在绘制回调解析文件或创建逐事件控件。
 void TimelineWidget::paintEvent(QPaintEvent*) {
     QElapsedTimer elapsed;
     elapsed.start();
@@ -175,11 +195,13 @@ void TimelineWidget::paintEvent(QPaintEvent*) {
         .arg(lastPrimitives_).arg(lastPaintMs_, 0, 'f', 2).arg(cache_.hits()).arg(cache_.misses())
         .arg(batch.approximate ? QStringLiteral("LOD概览（近似）") : QStringLiteral("精确区间")));
 }
+/// 以gutter为原点把横坐标映射为视口内纳秒时刻。
 TimeNs TimelineWidget::timeAt(double x) const {
     const auto view = viewport_.range();
     const double fraction = std::clamp((x - gutter) / std::max(1, width() - gutter - 12), 0.0, 1.0);
     return view.begin + TimeNs(fraction * double(view.end - view.begin));
 }
+/// 名称区滚轮滚轨道，事件区按鼠标锚点缩放时间，两者均受视口边界约束。
 void TimelineWidget::wheelEvent(QWheelEvent* event) {
     if (!snapshot_) return;
     if (event->position().x() < gutter) {
@@ -192,6 +214,7 @@ void TimelineWidget::wheelEvent(QWheelEvent* event) {
     update();
     event->accept();
 }
+/// 根据按键和命中开始选择/平移或发布事件；输入坐标为逻辑像素。
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (!snapshot_ || event->position().x() < gutter || event->position().y() < top) return;
     setFocus();
@@ -201,6 +224,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     selecting_ = event->button() == Qt::LeftButton;
     if (selecting_) { selection_.reset(); selectedEvent_.reset(); emit selectionCleared(); }
 }
+/// 拖动时更新交互，空闲时更新悬停；不改写源事件。
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (!snapshot_) return;
     const auto point = event->position().toPoint();
@@ -227,6 +251,7 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         update();
     }
 }
+/// 结束拖动并提交框选；短点击精确拾取，避免误触范围统计。
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (!snapshot_) return;
     if (selecting_) {
@@ -239,6 +264,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     panning_ = selecting_ = false;
     update();
 }
+/// 按点击时间和轨道查询原始事件，不把LOD聚合图元当作事件身份。
 void TimelineWidget::pick(const QPoint& point) {
     if (point.y() < top) return;
     const int track = trackAt(point.y());
@@ -251,6 +277,7 @@ void TimelineWidget::pick(const QPoint& point) {
     publishEvent(e);
     if (query.truncated) QToolTip::showText(mapToGlobal(point), QStringLiteral("该位置有重叠事件，当前选中首项"), this);
 }
+/// 把源事件与来源语义转为详情并发布，避免误把帧宽度当Kernel时长。
 void TimelineWidget::publishEvent(const Event& e) {
     emit eventPicked(e.id, QStringLiteral("记录 #%1\n名称：%2\n轨道：%3\n开始：%4 ms\n时长：%5 ms\n矩形结束：%6 ms\n来源：%7\n%8")
         .arg(e.id).arg(QString::fromStdString(snapshot_->names[e.name])).arg(QString::fromStdString(snapshot_->tracks[e.track].name))
@@ -259,6 +286,7 @@ void TimelineWidget::publishEvent(const Event& e) {
         .arg(snapshot_->frames ? QStringLiteral("开始为归一化Present时刻；时长为前一Present间隔；矩形结束仅为可视化编码，不是GPU结束时间。") : QStringLiteral("教学模拟事件，不是真实GPU采集")));
 }
 
+/// 处理Home全览和Esc清除，其余按键交给QWidget。
 void TimelineWidget::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Home) resetViewport();
     else if (event->key() == Qt::Key_Escape) { selection_.reset(); selectedEvent_.reset(); selecting_ = panning_ = false; emit selectionCleared(); update(); }

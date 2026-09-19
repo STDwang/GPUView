@@ -1,3 +1,5 @@
+/// @file tests/ui/ui_tests.cpp
+/// @brief 离屏Widgets交互回归：模型契约、稳定ID、图表联动、滚动和退出；不测真实屏幕FPS。
 #include "ui_widgets/timeline_widget.h"
 #include "ui_widgets/main_window.h"
 #include "adapters/synthetic_source.h"
@@ -15,9 +17,11 @@
 #include <QTableView>
 #include <QAbstractItemModelTester>
 using namespace gpuview;
+/// Qt Test界面回归集合；在离屏环境模拟输入并断言可观察状态。
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 用QAbstractItemModelTester检查模型契约，排序后按稳定ID恢复正确事件。
     void frameModelContractAndStableSelection() {
         FrameDetailsPanel panel; auto* model=panel.findChild<FrameTableModel*>(); QAbstractItemModelTester tester(model,QAbstractItemModelTester::FailureReportingMode::QtTest);
         auto source=buildStore({{9,0,2000000,0,0},{3,10000000,10000000,0,0}},{"app"},{"frame"},1,{}, {},true,true);
@@ -26,6 +30,7 @@ private slots:
         auto* table=panel.findChild<QTableView*>(); QCOMPARE(table->currentIndex().data(Qt::UserRole).toULongLong(),qulonglong(9));
         QCOMPARE(model->eventAt(0)->id,std::uint64_t(3)); QCOMPARE(model->rowCount(model->index(0,0)),0);
     }
+    /// 验证真实帧排序、表格选中、热力图选区及Home恢复在三个视图间一致。
     void heatmapTableAndTimelineStayInSync() {
         MainWindow window; window.show(); const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); window.controller()->requestFile(path);
         auto* model=window.findChild<FrameTableModel*>(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
@@ -40,6 +45,7 @@ private slots:
         window.timeline()->resetViewport(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
     }
 
+    /// 导入真实夹具后验证统计、帧曲线宽度与长帧双击定位。
     void realFileAnalysisAndLongFrameNavigation() {
         MainWindow window; window.show();
         const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); QVERIFY(!path.isEmpty());
@@ -57,6 +63,7 @@ private slots:
         QCOMPARE(window.findChild<QTabWidget*>("detailTabs")->currentIndex(),0);
     }
 
+    /// 验证点击事件、详情选择、框选缩放与上一视图恢复。
     void eventSelectionAndZoomHistory() {
         TimelineWidget widget; widget.resize(1000,600);
         auto data=buildStore({{1,0,100,0,0},{2,200,100,1,0}},{"CPU / a","GPU / b"},{"work"},1);
@@ -69,6 +76,7 @@ private slots:
         widget.setTracks({1}); QTest::mouseClick(&widget,Qt::LeftButton,Qt::NoModifier,QPoint(800,60));
         QVERIFY(widget.selectedEvent()); QCOMPARE(widget.selectedEvent()->track,std::uint32_t(1));
     }
+    /// 验证轨道导航过滤、勾选及组折叠对时间轴/统计的影响。
     void navigationFilterAndGroupCollapse() {
         MainWindow window; window.show(); window.controller()->requestSynthetic(1000);
         QTRY_VERIFY_WITH_TIMEOUT(bool(window.controller()->snapshot()),5000);
@@ -80,6 +88,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(summary->toPlainText().contains(QStringLiteral("数量")),5000);
     }
 
+    /// 验证滚动条位置、范围、页步长随轨道数和窗口高度正确更新。
     void trackScrollFollowsViewport() {
         MainWindow window;
         window.resize(1000, 600);
@@ -104,6 +113,7 @@ private slots:
         QCOMPARE(scroll->maximum(), 0);
         QCOMPARE(scroll->value(), 0);
     }
+    /// 验证时间轴可离屏绘制且密集数据图元受限，并检查缓存开关图像一致。
     void rendersBoundedGeometry() {
         TimelineWidget widget;
         widget.resize(1000, 600); widget.setSnapshot(generateTrace(100000, 1)); widget.show();
@@ -113,6 +123,7 @@ private slots:
         widget.setCacheEnabled(false); const auto uncached=widget.grab().toImage();
         widget.setCacheEnabled(true); QCOMPARE(widget.grab().toImage(),uncached);
     }
+    /// 模拟左键拖动，断言只发布有效半开纳秒选区。
     void selectionEmitsRange() {
         TimelineWidget widget;
         widget.resize(1000, 600); widget.setSnapshot(generateTrace(1000, 1)); widget.show();
@@ -123,6 +134,7 @@ private slots:
         QCOMPARE(spy.count(), 1);
         QVERIFY(spy[0][0].toLongLong() < spy[0][1].toLongLong());
     }
+    /// 模拟鼠标滚轮缩放并用Home恢复全会话范围。
     void wheelAndHome() {
         TimelineWidget widget;
         widget.resize(1000, 600); widget.setSnapshot(generateTrace(1000, 1)); widget.show();
@@ -134,6 +146,7 @@ private slots:
         QTest::keyClick(&widget, Qt::Key_Home);
         QVERIFY(widget.visibleRange() == original);
     }
+    /// 窗口在后台加载中关闭时可安全析构，不遗留访问已销毁控件的任务。
     void closeWhileBuilding() {
         auto window = std::make_unique<MainWindow>(); window->show();
         window->controller()->requestSynthetic(1000000);

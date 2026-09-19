@@ -1,3 +1,5 @@
+/// @file src/adapters/analysis_export.cpp
+/// @brief 将冻结帧分析序列化为CSV/Markdown，并以原子文件替换保证失败或取消不破坏旧报告。
 #include "adapters/analysis_export.h"
 #include <QSaveFile>
 #include <QTextStream>
@@ -5,11 +7,13 @@
 #include <QLocale>
 namespace gpuview {
 namespace {
+/// 转义CSV引号/换行并处理公式起始字符，避免表格软件将元数据作为公式执行。
 QString csv(QString value) {
     // 将来源/备注作为文本导出，避免表格软件把外部字符串解释为公式。
     const auto trimmed=value.trimmed();
     if(!trimmed.isEmpty() && QString("=+-@").contains(trimmed.front())) value.prepend(QChar(0x27));
     value.replace('"',"\"\""); return '"'+value+'"'; }
+/// 转义Markdown表格与HTML特殊字符，避免备注破坏报告结构。
 QString markdown(QString value) {
     value.replace('&',"&amp;"); value.replace('<',"&lt;"); value.replace('>',"&gt;");
     value.replace('|',"&#124;"); value.replace('\r'," "); value.replace('\n',"<br>");
@@ -17,6 +21,7 @@ QString markdown(QString value) {
     return value;
 }
 }
+/// 把冻结分析写入已打开设备；UTF-8输出，支持取消/进度，写失败抛异常；不负责提交目标文件。
 void writeAnalysis(QIODevice& output, const FrameAnalysis& analysis, ExportFormat format,
     const QString& notes, const CancelFlag& cancel, const Progress& progress) {
     if(!analysis.source || !analysis.source->frames) throw std::invalid_argument("frame analysis required");
@@ -62,6 +67,7 @@ void writeAnalysis(QIODevice& output, const FrameAnalysis& analysis, ExportForma
     checkCancelled(cancel); stream.flush();
     if(stream.status()!=QTextStream::Ok) throw std::runtime_error("Export write failed");
 }
+/// 原子保存分析到path；commit前取消或失败保留旧文件，提交成功后报告才可见。
 void saveAnalysis(const QString& path,const FrameAnalysis& analysis,ExportFormat format,
     const QString& notes,const CancelFlag& cancel,const Progress& progress) {
     checkCancelled(cancel);

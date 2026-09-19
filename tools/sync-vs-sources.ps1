@@ -1,4 +1,11 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿<#
+.SYNOPSIS
+枚举模块目录，为仓库根VS2022工程生成相对路径sources.props和filters浏览列表。
+.NOTES
+无参数。所有输出基于脚本所在仓库根；XML路径转义后写入，仅内容变化时更新文件。
+不修改用户的.sln或CMake构建目录中自动生成的工程，也不创建ide目录。
+#>
+$ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $ideRoot = $projectRoot
 New-Item -ItemType Directory -Path $ideRoot -Force | Out-Null
