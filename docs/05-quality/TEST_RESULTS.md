@@ -56,3 +56,7 @@ Debug/Release各2个CTest套件通过；52个实际用例（Core 42、UI 10，Qt
 ## 全项目注释补齐验证（2026-09-19）
 
 41个C++文件去除注释后与提交前对照，除三组并列成员的等价拆分外代码一致；3个PowerShell脚本语法解析通过，执行token不变。Debug重新构建成功，2个CTest套件、52个实际用例通过（Core 42、UI 10，不含初始化/清理）。本次未增加功能和重复测试，未重新测量性能；注释覆盖文件职责、类字段、显式函数、Qt信号/回调、测试入口和工具脚本。
+
+## v0.4验证（2026-09-25）
+
+Debug与Release均通过2个CTest套件、57个实际用例（Core 45、UI 12；Qt totals 47+14含初始化/清理）。新增eventSearchAggregationAndFrameSemantics、eventSearchFullRowsSortAndCancellation、eventSearchLatestCancelAndShutdown、eventExplorerSearchSortAndNavigation、eventExplorerWindowLink。覆盖完整命中、精确贡献口径、整数极值排序、最新发布、取消/关闭、模型契约及视图联动。搜索性能独立测量见[报告](../../benchmarks/reports/EVENT_ANALYSIS.md)；未执行长期压力或干净环境部署。

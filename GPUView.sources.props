@@ -10,6 +10,8 @@
     <ClCompile Include="src\adapters\synthetic_source.cpp" />
     <ClInclude Include="src\adapters\synthetic_source.h" />
     <ClCompile Include="src\app\main.cpp" />
+    <ClCompile Include="src\application\event_analysis_controller.cpp" />
+    <ClInclude Include="src\application\event_analysis_controller.h" />
     <ClCompile Include="src\application\export_controller.cpp" />
     <ClInclude Include="src\application\export_controller.h" />
     <ClCompile Include="src\application\session_controller.cpp" />
@@ -18,6 +20,8 @@
     <ClInclude Include="src\application\statistics_controller.h" />
     <ClCompile Include="src\core\clock_mapping.cpp" />
     <ClInclude Include="src\core\clock_mapping.h" />
+    <ClCompile Include="src\core\event_analysis.cpp" />
+    <ClInclude Include="src\core\event_analysis.h" />
     <ClCompile Include="src\core\frame_analysis.cpp" />
     <ClInclude Include="src\core\frame_analysis.h" />
     <ClCompile Include="src\core\render_query.cpp" />
@@ -26,6 +30,8 @@
     <ClInclude Include="src\core\statistics.h" />
     <ClCompile Include="src\core\trace_store.cpp" />
     <ClInclude Include="src\core\trace_store.h" />
+    <ClCompile Include="src\ui_widgets\event_explorer.cpp" />
+    <ClInclude Include="src\ui_widgets\event_explorer.h" />
     <ClCompile Include="src\ui_widgets\frame_details_panel.cpp" />
     <ClInclude Include="src\ui_widgets\frame_details_panel.h" />
     <ClCompile Include="src\ui_widgets\frame_heatmap.cpp" />
@@ -44,6 +50,7 @@
     <None Include="tools\build.ps1" />
     <ClCompile Include="tools\capture_target\main.cpp" />
     <None Include="tools\capture-presentmon.ps1" />
+    <ClCompile Include="tools\event_benchmark\main.cpp" />
     <ClCompile Include="tools\frame_benchmark\main.cpp" />
     <None Include="tools\sync-vs-sources.ps1" />
     <ClCompile Include="tools\ui_benchmark\main.cpp" />

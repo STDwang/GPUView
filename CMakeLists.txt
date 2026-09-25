@@ -1,7 +1,7 @@
 # GPUView构建入口：按模块目录收集源文件，隔离应用/测试/基准各自的main。
 # 公开VS工程只是相对路径的调试入口，实际编译目标和依赖关系由这里统一维护。
 cmake_minimum_required(VERSION 3.21)
-project(GPUView VERSION 0.3.0 LANGUAGES CXX)
+project(GPUView VERSION 0.4.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -84,3 +84,9 @@ target_link_libraries(gpuview_frame_benchmark PRIVATE gpuview_widgets)
 if(WIN32)
   target_link_libraries(gpuview_frame_benchmark PRIVATE psapi)
 endif()
+
+# 事件搜索基准独立入口，只测算法时间，不混入UI绘制或屏幕FPS。
+gpuview_collect_sources(event_benchmark_sources tools/event_benchmark)
+add_executable(gpuview_event_benchmark ${event_benchmark_sources})
+target_link_libraries(gpuview_event_benchmark PRIVATE gpuview_adapters)
+set_target_properties(gpuview_event_benchmark PROPERTIES AUTOMOC OFF)

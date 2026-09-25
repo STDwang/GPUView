@@ -96,3 +96,7 @@ B 采用已导入数据的逻辑游标回放，不额外复制全部数据。显
 core/frame_analysis保存不可变source+FrameRow索引、稳定ID查找表、稀疏秒桶和4096格max概览。StatisticsController在worker计算/排序，通过最新请求代次检查后发布。FrameTableModel仅在GUI线程绑定结果，不复制百万QVariant，不用每帧QObject；选择用业务ID恢复。
 
 adapters/presentmon_csv同次读取计算摘要；adapters/analysis_export负责格式、转义与QSaveFile原子保存，因此adapters依赖QtCore，core仍不依赖Qt。application/ExportController冻结快照并协调单个导出worker、取消/进度/退出；ui_widgets只处理保存对话框和用户状态。所有权、提交点与证据见[本轮案例](../07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。
+
+## v0.4事件分析（2026-09-25）
+
+新增独立事件分析core/controller/panel模块，以完整原始数据进行名称/时长/轨道/选区搜索与名称聚合；不可变结果中保存源快照所有权及非拥有事件指针，GUI按需读取。单Worker+最新待办控制任务数量，180ms防抖减少重复输入，代次校验负责正确性。具体模块接口与限制见[事件分析案例](../07-interview/EVENT_EXPLORER_WALKTHROUGH.md)。

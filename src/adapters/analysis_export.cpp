@@ -29,7 +29,7 @@ void writeAnalysis(QIODevice& output, const FrameAnalysis& analysis, ExportForma
     const auto& source=*analysis.source; const auto& stats=analysis.summary;
     const auto track=analysis.tracks.empty() ? QStringLiteral("none") : QString::fromStdString(source.tracks[analysis.tracks.front()].name);
     QList<QPair<QString,QString>> fields{
-        {"csv_text_policy","formula-leading metadata values are prefixed with apostrophe"},{"report_schema","GPUView-analysis-v1"},{"application_version","0.3.0"},
+        {"csv_text_policy","formula-leading metadata values are prefixed with apostrophe"},{"report_schema","GPUView-analysis-v1"},{"application_version","0.4.0"},
         {"source_sha256",QString::fromStdString(source.input.sha256.empty()?"unavailable":source.input.sha256)},
         {"source",QString::fromStdString(source.source)},{"synthetic",source.synthetic?"true":"false"},
         {"source_records",QString::number(qulonglong(source.input.records))},

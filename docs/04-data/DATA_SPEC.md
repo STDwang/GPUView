@@ -112,3 +112,7 @@ UTF-8、C locale，模式GPUView-analysis-v1。统计CSV与完整帧CSV统一7�
 元数据包含application_version、source_sha256（解析实际读取的原始字节）、synthetic、source_records/rejected、snapshot_version、group、range_begin/end_ns、selection_rule、long_frame_rule、percentile_rule、sort_column/descending、count、统计值、user_notes、warning与limitations。sort_column：0=ID，1=Present，2=间隔，3=长帧。源字节摘要与规范化换行后的摘要可能不同；未识别采集器二进制版本时不得据字段模式假定版本。
 
 CSV值规范转义引号/换行；元数据去除前导空白后若以=+-@开头，增加单引号避免电子表格公式执行，csv_text_policy标明此策略。空选区分位数/FPS为N/A。导出不包含本机完整输入路径。Present时刻归属[begin,end)，间隔不裁剪；长帧依旧参考完整历史。热力图为全组1秒桶max，缺失N/A，颜色不是GPU利用率。
+
+## v0.4事件分析语义
+
+名称为区分大小写的UTF-8字面子串；min/max筛选原始完整时长，均含边界，上限0在UI转换为无上限。Trace以区间相交入选，贡献按range裁剪；帧以Present属于[begin,end)入选，贡献为完整间隔。同名事件跨所选轨道汇总，重复轨道ID不重复计数。名称汇总代表项为最大贡献事件，同值选择最小ID。该筛选不作用于既有帧导出，详情见[参考与边界](../02-product/NSIGHT_REFERENCE.md)。

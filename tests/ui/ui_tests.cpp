@@ -14,6 +14,9 @@
 #include "ui_widgets/frame_time_widget.h"
 #include "ui_widgets/frame_details_panel.h"
 #include "ui_widgets/frame_heatmap.h"
+#include "ui_widgets/event_explorer.h"
+#include <QPushButton>
+#include <QDoubleSpinBox>
 #include <QTableView>
 #include <QAbstractItemModelTester>
 using namespace gpuview;
@@ -21,6 +24,40 @@ using namespace gpuview;
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 搜索模型契约、名称筛选、排序后ID、汇总和空结果导航均通过真实GUI输入验证。
+    void eventExplorerSearchSortAndNavigation() {
+        EventExplorer panel; panel.resize(1100,320); panel.show();
+        auto* model=panel.findChild<EventAnalysisModel*>("eventResultsModel");
+        auto* groups=panel.findChild<EventAnalysisModel*>("eventGroupsModel");
+        QAbstractItemModelTester a(model,QAbstractItemModelTester::FailureReportingMode::QtTest);
+        QAbstractItemModelTester b(groups,QAbstractItemModelTester::FailureReportingMode::QtTest);
+        auto source=buildStore({{9,0,100,0,0},{3,100,300,0,0},{5,600,50,0,1}},{"track"},{"task","other"},1);
+        panel.setContext(source,{0},std::nullopt); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),3,5000);
+        panel.selectId(9); model->sort(4,Qt::DescendingOrder);
+        QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.eventColumn==4,5000);
+        auto* table=panel.findChild<QTableView*>("eventResults"); QCOMPARE(model->eventAt(table->currentIndex().row())->id,std::uint64_t(9));
+        panel.findChild<QLineEdit*>("eventSearch")->setText("task");
+        QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),2,5000); QCOMPARE(groups->rowCount(),1);
+        panel.setContext(source,{0},TimeRange{100,200}); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),1,5000);
+        QCOMPARE(model->result()->rows[0].contribution,TimeNs(100));
+        QSignalSpy selected(&panel,&EventExplorer::eventActivated);
+        QTest::mouseClick(panel.findChild<QPushButton*>("eventNext"),Qt::LeftButton); QCOMPARE(selected.count(),1);
+        panel.findChild<QLineEdit*>("eventSearch")->setText("absent");
+        QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.text=="absent",5000);
+        QCOMPARE(model->rowCount(),0); QVERIFY(!panel.findChild<QPushButton*>("eventNext")->isEnabled());
+    }
+    /// 主窗口把搜索结果ID映射回时间轴，框选范围也传递给独立搜索面板。
+    void eventExplorerWindowLink() {
+        MainWindow window; window.show(); window.controller()->requestSynthetic(100000);
+        auto* explorer=window.findChild<EventExplorer*>(); auto* model=explorer->findChild<EventAnalysisModel*>("eventResultsModel");
+        QTRY_VERIFY_WITH_TIMEOUT(model->rowCount()>0,5000);
+        const auto id=model->eventAt(0)->id;
+        auto* table=explorer->findChild<QTableView*>("eventResults"); table->setCurrentIndex(model->index(0,0));
+        QVERIFY(window.timeline()->selectedEvent()); QCOMPARE(window.timeline()->selectedEvent()->id,id);
+        window.timeline()->selectRange({0,1000000});
+        QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.range.end==1000000,5000);
+        window.controller()->requestSynthetic(1000000); // 析构同时覆盖加载和搜索Worker退出路径。
+    }
     /// 用QAbstractItemModelTester检查模型契约，排序后按稳定ID恢复正确事件。
     void frameModelContractAndStableSelection() {
         FrameDetailsPanel panel; auto* model=panel.findChild<FrameTableModel*>(); QAbstractItemModelTester tester(model,QAbstractItemModelTester::FailureReportingMode::QtTest);

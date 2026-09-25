@@ -3,6 +3,7 @@
 #include "ui_widgets/main_window.h"
 #include "ui_widgets/frame_time_widget.h"
 #include "ui_widgets/frame_details_panel.h"
+#include "ui_widgets/event_explorer.h"
 #include "ui_widgets/frame_heatmap.h"
 #include <QFileInfo>
 #include <QDockWidget>
@@ -95,12 +96,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     tracksDock->setWidget(tracksPage); addDockWidget(Qt::LeftDockWidgetArea,tracksDock);
     auto* framesDock = new QDockWidget(QStringLiteral("帧明细 / 分析导出"),this); framesDock->setObjectName("framesDock");
     auto* framesPanel = new FrameDetailsPanel; framesDock->setWidget(framesPanel); addDockWidget(Qt::BottomDockWidgetArea,framesDock); framesDock->hide();
+    // 事件分析独立封装，和帧导出页共用底部Dock区域，不挤占更多时间轴高度。
+    auto* eventsDock = new QDockWidget(QStringLiteral("事件分析 / 名称汇总"),this); eventsDock->setObjectName("eventsDock");
+    auto* explorer = new EventExplorer; eventsDock->setWidget(explorer); addDockWidget(Qt::BottomDockWidgetArea,eventsDock);
+    tabifyDockWidget(framesDock,eventsDock); eventsDock->raise();
+    connect(explorer,&EventExplorer::eventSelected,timeline_,&TimelineWidget::selectEvent);
+    connect(explorer,&EventExplorer::eventActivated,timeline_,&TimelineWidget::focusEvent);
+    // 时间轴回传稳定ID，面板内部阻断反向选择信号以避免递归。
+    connect(timeline_,&TimelineWidget::eventPicked,explorer,[explorer](qulonglong id,const QString&) { if(id) explorer->selectId(id); });
     auto* viewMenu = menuBar()->addMenu(QStringLiteral("视图"));
-    viewMenu->addAction(tracksDock->toggleViewAction()); viewMenu->addAction(detailDock->toggleViewAction()); viewMenu->addAction(framesDock->toggleViewAction());
+    viewMenu->addAction(tracksDock->toggleViewAction()); viewMenu->addAction(detailDock->toggleViewAction()); viewMenu->addAction(framesDock->toggleViewAction()); viewMenu->addAction(eventsDock->toggleViewAction());
     auto range = std::make_shared<std::optional<TimeRange>>();
     auto sortState = std::make_shared<std::pair<FrameSort,bool>>(FrameSort::Start,false);
     // 统一汇总当前快照、轨道、组选项、范围和排序；先清空旧范围显示，再发后台统计请求。
-    auto requestStats = [this,range,group,summary,longest,longTable,frameChart,heatmap,framesPanel,sortState] {
+    auto requestStats = [this,range,group,summary,longest,longTable,frameChart,heatmap,framesPanel,sortState,explorer] {
         statistics_.cancel(); longest->setEnabled(false); longTable->setRowCount(0);
         framesPanel->setAnalysis({}); heatmap->setAnalysis({});
         const auto snapshot = controller_.snapshot(); if (!snapshot) return;
@@ -112,6 +121,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         frameChart->setVisible(snapshot->frames && !tracks.empty()); heatmap->setVisible(snapshot->frames && !tracks.empty());
         if(snapshot->frames && !tracks.empty()) { frameChart->setData(snapshot, tracks.front()); frameChart->setRange(timeline_->visibleRange()); }
         summary->setPlainText(QStringLiteral("正在后台计算原始数据统计…"));
+        explorer->setContext(snapshot,tracks,*range);
         statistics_.request(snapshot, range->value_or(snapshot->bounds), std::move(tracks),sortState->first,sortState->second);
     };
     // 名称过滤、勾选和折叠共同产生源轨道ID列表；清除旧选区并重算当前显示数据统计。

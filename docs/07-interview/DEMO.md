@@ -39,3 +39,7 @@
 2. 点击热力图某一秒，观察明细数量与统计范围同步；Home回全览。说明颜色取max，不能据此推出GPU利用率。
 3. 输入备注导出Markdown与完整帧CSV；展示来源SHA、选区/长帧口径和905帧记录。说明后台固定快照，取消不破坏旧报告。
 4. 打开[案例](FRAME_ANALYSIS_WALKTHROUGH.md)沿模型、worker和QSaveFile讲解；性能问题用[测量证据](../../benchmarks/reports/FRAME_ANALYSIS.md)回答，不口头声称60FPS。
+
+## v0.4加演：从名称汇总回到时间轴
+
+生成10万教学事件，底部搜索Kernel；点击完整时长降序，再用上下条定位。框选局部范围，对比完整时长与范围贡献；进入名称汇总，双击最大贡献项定位。快速改词并取消，解释防抖与代次校验职责不同。具体口述及代码见[本轮案例](EVENT_EXPLORER_WALKTHROUGH.md)。教学名称不代表实际Kernel采集，搜索条件也不参与当前帧导出。

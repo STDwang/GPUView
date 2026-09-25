@@ -2,7 +2,7 @@
 
 **面向面试讲解和项目式学习的 C++17 / Qt 6 Widgets 性能可视化工具。**
 
-当前是 **v0.3 Widgets 分析演示版**：百万教学事件时间线、精确选区统计，以及真实 PresentMon v1 CSV 的导入、帧间隔曲线和长帧定位已贯通。支持轨道过滤/折叠、事件高亮、视图历史、后台取消与失败保留会话。**仍不是完整 GPU Profiler：没有真实 Kernel、指令或调用栈分析，资源遥测、回放和 Quick 对照尚未实现。**
+当前是 **v0.4 Widgets 分析演示版**：百万教学事件时间线、精确选区统计，以及真实 PresentMon v1 CSV 的导入、帧间隔曲线和长帧定位已贯通。支持事件搜索、时长筛选、名称聚合及时间轴双向联动；保留轨道过滤/折叠、事件高亮、视图历史、后台取消与失败保留会话。**仍不是完整 GPU Profiler：没有真实 Kernel、指令或调用栈分析，资源遥测、回放和 Quick 对照尚未实现。**
 
 项目与微软同名 GPUView 工具没有隶属关系。教学模式的 CPU/GPU 轨道全部为模拟数据；另附 [真实帧样本及采集说明](data/samples/PRESENTMON_CAPTURE.md)。
 
@@ -79,6 +79,16 @@ SDK准备、运行与部署见 [构建和运行](docs/03-architecture/BUILD.md)�
 
 输入限定为 `Application, ProcessID, SwapChainAddress, TimeInSeconds, MsBetweenPresents` 字段模式（大小写不敏感），额外列允许。QPC、日期时间、其他版本字段拒绝；不把缺失数值补0。支持全部有效Present间隔，尚无Dropped筛选。真实采集可运行 [capture-presentmon.ps1](tools/capture-presentmon.ps1)，需准备固定版本工具并先构建Release。
 
+## 事件分析（v0.4）
+
+底部“事件分析 / 名称汇总”参考 Nsight Systems 的事件表与时间轴联动流程：名称区分大小写、字面包含；完整时长上下限以毫秒输入，上限0表示不限。默认遵循框选范围及当前显示轨道，帧模式按统计页当前组分析。
+
+单击结果高亮时间轴，双击或上一条/下一条定位；点击表头后台排序。名称汇总显示次数、贡献总和/均值/最大值，双击定位最大贡献事件。Trace贡献按选区裁剪；帧按Present时刻归属并保留完整间隔，并发求和不是利用率。
+
+**这里的名称/时长条件仅作用于事件分析面板，不改变现有帧分析导出的条件。** 当前未实现搜索结果导出、正则、真实CUDA关联或.nsys-rep导入。
+
+[参考与功能边界](docs/02-product/NSIGHT_REFERENCE.md) · [代码与面试案例](docs/07-interview/EVENT_EXPLORER_WALKTHROUGH.md) · [搜索基准](benchmarks/reports/EVENT_ANALYSIS.md)
+
 ## 性能证据
 
 运行 `./build/Release/gpuview_benchmark.exe benchmarks/results/repro.csv` 比较同一批100个查询的朴素扫描与索引查询，并检查命中数量一致。
@@ -105,7 +115,7 @@ core不依赖Qt；UI不解析文件，不管理worker内部数据。不为每个
 ## 后续范围
 
 1. **A后续**：干净环境交付与完整验收；热力图、完整帧明细、CSV/Markdown导出已实现。
-2. **B 完整Widgets面试版**：遥测、时间对齐、Trace文件子集、名称聚合、回放、完整性能与发布验证。
+2. **B 完整Widgets面试版**：遥测、时间对齐、Trace文件子集、回放、完整性能与发布验证。
 3. **C Qt Quick对照学习版**：复用核心数据契约，可由AI辅助；以理解和讲解为目标。
 
 本轮P0/P1改进的逐项证据见 [交付清单](docs/00-review/P0_P1_DELIVERY.md)。这不等于原PRD中A/B全部功能已经验收。按任务包推进，每项功能同步更新README、测试与面试文档。
@@ -117,3 +127,5 @@ core不依赖Qt；UI不解析文件，不管理worker内部数据。不为每个
 个人背景与原始采集仅留本地；公开仓库不含凭据、完整聊天资料及SDK。公开技术文档可独立阅读。
 
 帧明细新增证据：[百万帧测量](benchmarks/reports/FRAME_ANALYSIS.md) · [问题、代码与练习](docs/07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。Debug/Release均通过52个实际用例（Core 42 + UI 10，不含初始化和清理）。
+
+2026-09-25 v0.4：Debug/Release均通过57个实际用例（Core 45 + UI 12）。百万教学事件全量搜索、聚合、排序与ID映射中位数299.675ms；仅算法计时，不包含输入防抖、GUI排队或绘制。

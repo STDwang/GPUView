@@ -8,6 +8,7 @@
 #include "adapters/presentmon_csv.h"
 #include "core/statistics.h"
 #include "application/statistics_controller.h"
+#include "application/event_analysis_controller.h"
 #include <sstream>
 #include <QTemporaryFile>
 #include <QTemporaryDir>
@@ -23,6 +24,59 @@ using namespace gpuview;
 class CoreTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 搜索同时遵守原始时长过滤、半开范围和重复轨道去重，同名字典项应合并。
+    void eventSearchAggregationAndFrameSemantics() {
+        const std::vector<Event> events{{1,0,100,0,0},{2,50,100,1,0},{3,150,20,0,1},{4,60,10,0,2}};
+        auto source=buildStore(events,{"CPU","GPU"},{"task","Other","task"},1);
+        EventFilter filter; filter.range={60,100}; filter.tracks={0,1,0}; filter.text="ask";
+        auto result=analyzeEvents(source,filter);
+        QCOMPARE(result->rows.size(),std::size_t(3)); QCOMPARE(result->groups.size(),std::size_t(1));
+        QCOMPARE(result->groups[0].count,std::size_t(3)); QCOMPARE(result->groups[0].maximum,TimeNs(40));
+        QVERIFY(std::abs(double(result->groups[0].totalMs)-.00009)<1e-12);
+        QCOMPARE(result->groups[0].representative->id,std::uint64_t(1)); QCOMPARE(result->rowForId(4),2);
+        filter.minimum=20; filter.eventColumn=0; filter.eventDescending=true;
+        result=analyzeEvents(source,filter); QCOMPARE(result->rows.size(),std::size_t(2)); QCOMPARE(result->rows[0].event->id,std::uint64_t(2));
+        filter.minimum=0; source=buildStore(events,{"CPU","GPU"},{"task","Other","task"},2,{}, {},true,true);
+        result=analyzeEvents(source,filter); QCOMPARE(result->rows.size(),std::size_t(1)); QCOMPARE(result->rows[0].event->id,std::uint64_t(4));
+        QCOMPARE(result->rows[0].contribution,TimeNs(10));
+    }
+    /// 完整匹配不截断到10000行，所有表列排序仍保留唯一ID并支持空范围和非法条件。
+    void eventSearchFullRowsSortAndCancellation() {
+        std::vector<Event> events; for(int i=0;i<10021;++i) events.push_back({std::uint64_t(i+1),TimeNs(i)*100,TimeNs(i%7+1),0,0});
+        auto source=buildStore(std::move(events),{"track"},{"任务"},1);
+        EventFilter filter; filter.range=source->bounds; filter.tracks={0}; filter.text="任务";
+        for(int column=0;column<6;++column) {
+            filter.eventColumn=column; filter.eventDescending=true;
+            const auto result=analyzeEvents(source,filter); QCOMPARE(result->rows.size(),std::size_t(10021));
+            QCOMPARE(result->groups[0].count,std::size_t(10021)); QVERIFY(result->rowForId(10021)>=0);
+            if(column==4) QCOMPARE(result->rows.front().event->duration,TimeNs(7));
+        }
+        auto flag=std::make_shared<std::atomic_bool>(true);
+        QVERIFY_THROWS_EXCEPTION(Cancelled,analyzeEvents(source,filter,flag));
+        filter.maximum=0; filter.minimum=1; QVERIFY_THROWS_EXCEPTION(std::invalid_argument,analyzeEvents(source,filter));
+        filter.minimum=0; filter.maximum.reset(); filter.range={5,5}; QVERIFY(analyzeEvents(source,filter)->rows.empty());
+        filter.tracks={99}; QVERIFY_THROWS_EXCEPTION(std::invalid_argument,analyzeEvents(source,filter));
+        // 最大贡献仍按整数纳秒比较，不让double舍入把相邻大整数误作相同值。
+        const TimeNs large=9007199254740992LL;
+        source=buildStore({{1,0,large,0,0},{2,0,large+1,0,1}},{"track"},{"A","B"},2);
+        filter={}; filter.range=source->bounds; filter.tracks={0}; filter.groupColumn=4;
+        QCOMPARE(analyzeEvents(source,filter)->groups.front().name,std::string("B"));
+    }
+    /// 最新请求才可回GUI发布；取消清空待办，析构等待运行任务，旧快照仍由调用方持有。
+    void eventSearchLatestCancelAndShutdown() {
+        auto source=generateTrace(100000,1); EventFilter filter; filter.range=source->bounds;
+        for(std::uint32_t i=0;i<source->tracks.size();++i) filter.tracks.push_back(i);
+        EventAnalysisController controller; QSignalSpy ready(&controller,&EventAnalysisController::ready);
+        QThread* published=nullptr;
+        // 记录真实接收线程，用于验证Worker不直接发布到界面。
+        connect(&controller,&EventAnalysisController::ready,this,[&]{published=QThread::currentThread();});
+        controller.request(source,filter); filter.text="no-such-event"; controller.request(source,filter);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(),1,5000); QVERIFY(controller.result()->rows.empty()); QCOMPARE(published,QThread::currentThread());
+        filter.text.clear(); controller.request(source,filter); controller.cancel();
+        QTest::qWait(80); QCOMPARE(ready.count(),1); QVERIFY(!controller.result());
+        { EventAnalysisController closing; closing.request(source,filter); }
+        QCOMPARE(source->eventCount,std::size_t(100000));
+    }
     /// 验证排序不改变事件身份、ID查找正确、稀疏热力桶保留尖峰且空选区不删除全会话热图。
     void frameRowsSortIdentityAndSparseHeat() {
         auto store=buildStore({{9,0,2000000,0,0},{3,500000000,10000000,0,0},{7,2000000000,60000000,0,0}},
