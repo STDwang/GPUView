@@ -48,6 +48,8 @@
     <ClInclude Include="src\core\statistics.h"><Filter>src\core</Filter></ClInclude>
     <ClCompile Include="src\core\trace_store.cpp"><Filter>src\core</Filter></ClCompile>
     <ClInclude Include="src\core\trace_store.h"><Filter>src\core</Filter></ClInclude>
+    <ClCompile Include="src\ui_widgets\duration_spin_box.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
+    <ClInclude Include="src\ui_widgets\duration_spin_box.h"><Filter>src\ui_widgets</Filter></ClInclude>
     <ClCompile Include="src\ui_widgets\event_explorer.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
     <ClInclude Include="src\ui_widgets\event_explorer.h"><Filter>src\ui_widgets</Filter></ClInclude>
     <ClCompile Include="src\ui_widgets\frame_details_panel.cpp"><Filter>src\ui_widgets</Filter></ClCompile>

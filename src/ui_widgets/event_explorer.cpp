@@ -1,6 +1,7 @@
 /// @file event_explorer.cpp
 /// @brief Nsight Systems Events View启发的搜索/汇总联动；不声称支持其私有报告或采集能力。
 #include "ui_widgets/event_explorer.h"
+#include "ui_widgets/duration_spin_box.h"
 #include <QLineEdit>
 #include <QDoubleSpinBox>
 #include <QCheckBox>
@@ -79,7 +80,7 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     text_->setAccessibleName(QStringLiteral("搜索事件名称")); searchRow->addWidget(text_,1);
     auto* reset=new QPushButton(QStringLiteral("重置筛选")); reset->setObjectName("eventReset");
     reset->setToolTip(QStringLiteral("清空名称和时长条件，恢复仅选区；保留当前排序。")); searchRow->addWidget(reset);
-    minimum_=new QDoubleSpinBox; maximum_=new QDoubleSpinBox;
+    minimum_=new DurationSpinBox; maximum_=new DurationSpinBox;
     minimum_->setObjectName("eventMinimum"); maximum_->setObjectName("eventMaximum");
     for(auto* spin:{minimum_,maximum_}) { spin->setRange(0,1e9); spin->setDecimals(6); spin->setSuffix(" ms"); }
     maximum_->setSpecialValueText(QStringLiteral("不限"));
@@ -89,10 +90,12 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     selectedOnly_->setChecked(true); controls->addWidget(selectedOnly_);
     previous_=new QPushButton(QStringLiteral("上一条")); next_=new QPushButton(QStringLiteral("下一条"));
     previous_->setObjectName("eventPrevious"); next_->setObjectName("eventNext");
+    previous_->setShortcut(QKeySequence(Qt::SHIFT|Qt::Key_F3)); next_->setShortcut(QKeySequence(Qt::Key_F3));
+    previous_->setToolTip(QStringLiteral("上一条匹配事件 · Shift+F3")); next_->setToolTip(QStringLiteral("下一条匹配事件 · F3"));
     cancel_=new QPushButton(QStringLiteral("取消")); cancel_->setObjectName("eventCancel");
     searchRow->addWidget(previous_); searchRow->addWidget(next_); searchRow->addWidget(cancel_);
     controls->addStretch(); layout->addLayout(searchRow); layout->addLayout(controls);
-    status_=new QLabel(QStringLiteral("加载数据后可搜索事件")); status_->setWordWrap(true); layout->addWidget(status_);
+    status_=new QLabel(QStringLiteral("加载数据后可搜索事件")); status_->setObjectName("eventStatus"); status_->setWordWrap(true); layout->addWidget(status_);
     events_=new EventAnalysisModel(false,this); groups_=new EventAnalysisModel(true,this);
     events_->setObjectName("eventResultsModel"); groups_->setObjectName("eventGroupsModel");
     table_=new QTableView; summary_=new QTableView;
@@ -116,7 +119,7 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     connect(text_,&QLineEdit::textChanged,this,&EventExplorer::schedule);
     connect(reset,&QPushButton::clicked,this,&EventExplorer::resetFilters);
     // 回车立即提交，停止防抖计时，避免同一输入重复提交。
-    connect(text_,&QLineEdit::returnPressed,this,[this] { schedule(); debounce_.stop(); submit(); });
+    connect(text_,&QLineEdit::returnPressed,this,&EventExplorer::submitNow);
     connect(minimum_,&QDoubleSpinBox::valueChanged,this,&EventExplorer::schedule);
     connect(maximum_,&QDoubleSpinBox::valueChanged,this,&EventExplorer::schedule);
     connect(selectedOnly_,&QCheckBox::toggled,this,&EventExplorer::schedule);
@@ -124,7 +127,7 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     for(auto* model:{events_,groups_}) connect(model,&EventAnalysisModel::sortRequested,this,[this](bool groups,int column,bool descending) {
         if(groups) { filter_.groupColumn=column; filter_.groupDescending=descending; }
         else { filter_.eventColumn=column; filter_.eventDescending=descending; }
-        schedule();
+        submitNow();
     });
     // 普通行选择只高亮，不改变搜索范围；时间轴反向恢复时使用信号阻断。
     connect(table_->selectionModel(),&QItemSelectionModel::currentRowChanged,this,[this](const QModelIndex& index) {
@@ -169,7 +172,7 @@ void EventExplorer::focusSearch() { text_->setFocus(Qt::ShortcutFocusReason); te
 void EventExplorer::resetFilters() {
     const QSignalBlocker textBlock(text_),minimumBlock(minimum_),maximumBlock(maximum_),selectionBlock(selectedOnly_);
     text_->clear(); minimum_->setValue(0); maximum_->setValue(0); selectedOnly_->setChecked(true);
-    schedule(); focusSearch();
+    submitNow(); focusSearch();
 }
 /// 相同上下文不因帧表独立排序而重复搜索，换会话不继承旧ID。
 void EventExplorer::setContext(Snapshot source,std::vector<std::uint32_t> tracks,std::optional<TimeRange> selection) {
@@ -189,12 +192,21 @@ void EventExplorer::schedule() {
 /// 以毫秒输入构造纳秒过滤；上限0专门表示无限，不与空结果混淆。
 void EventExplorer::submit() {
     if(!source_) return;
+    // 可纠正的输入错误留在GUI提示，不启动必然失败的Worker，也不显示旧结果。
+    if(maximum_->value()>0 && maximum_->value()<minimum_->value()) {
+        controller_.cancel();
+        cancel_->setEnabled(false);
+        status_->setText(QStringLiteral("时长上限不能小于下限；上限为“不限”时不设限制。"));
+        return;
+    }
     filter_.text=text_->text().toStdString(); filter_.tracks=tracks_;
     filter_.range=selectedOnly_->isChecked() && selection_?*selection_:source_->bounds;
     filter_.minimum=TimeNs(minimum_->value()*1e6);
     filter_.maximum=maximum_->value()>0?std::optional<TimeNs>(TimeNs(maximum_->value()*1e6)):std::nullopt;
     controller_.request(source_,filter_);
 }
+/// 清空过期行并失效旧请求后立即提交，避免表头点击也额外等待180ms。
+void EventExplorer::submitNow() { schedule(); debounce_.stop(); submit(); }
 /// 二分查找事件身份，未匹配时清空可见选择但保留待恢复ID。
 void EventExplorer::selectId(std::uint64_t id) {
     selectedId_=id; const auto result=events_->result(); if(!result) return;

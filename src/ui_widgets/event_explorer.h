@@ -60,6 +60,8 @@ private:
     void schedule();
     /// 读取GUI条件并冻结为纯数据参数发送Worker。
     void submit();
+    /// 表头、回车等明确操作跳过输入防抖，仍经同一取消/代次链提交。
+    void submitNow();
     /// 批量恢复筛选默认值，只发起一次新查询，保留用户排序。
     void resetFilters();
     /// 在当前排序中循环导航；空结果不执行。

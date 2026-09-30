@@ -30,6 +30,8 @@
     <ClInclude Include="src\core\statistics.h" />
     <ClCompile Include="src\core\trace_store.cpp" />
     <ClInclude Include="src\core\trace_store.h" />
+    <ClCompile Include="src\ui_widgets\duration_spin_box.cpp" />
+    <ClInclude Include="src\ui_widgets\duration_spin_box.h" />
     <ClCompile Include="src\ui_widgets\event_explorer.cpp" />
     <ClInclude Include="src\ui_widgets\event_explorer.h" />
     <ClCompile Include="src\ui_widgets\frame_details_panel.cpp" />

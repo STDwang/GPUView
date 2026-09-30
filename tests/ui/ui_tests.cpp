@@ -22,11 +22,34 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QProgressBar>
+#include <QLabel>
 using namespace gpuview;
 /// Qt Test界面回归集合；在离屏环境模拟输入并断言可观察状态。
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 非法上下限不发布旧结果，回车纠正立即提交；快捷导航沿当前排序前后切换。
+    void searchValidationAndKeyboardNavigation() {
+        EventExplorer panel; panel.resize(1100,320); panel.show();
+        const auto source=buildStore({{1,0,1000000,0,0},{2,2000000,2000000,0,0}},{"track"},{"work"},1);
+        auto* model=panel.findChild<EventAnalysisModel*>("eventResultsModel");
+        panel.setContext(source,{0},std::nullopt); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),2,5000);
+        panel.findChild<QDoubleSpinBox*>("eventMinimum")->setValue(2);
+        panel.findChild<QDoubleSpinBox*>("eventMaximum")->setValue(1);
+        auto* status=panel.findChild<QLabel*>("eventStatus");
+        QTRY_VERIFY(status->text().contains(QStringLiteral("上限不能小于下限")));
+        QVERIFY(!model->result()); QVERIFY(!panel.findChild<QPushButton*>("eventCancel")->isEnabled());
+        auto* search=panel.findChild<QLineEdit*>("eventSearch"); panel.focusSearch();
+        panel.findChild<QDoubleSpinBox*>("eventMaximum")->setValue(0);
+        QTest::keyClick(search,Qt::Key_Return); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),1,5000);
+        QCOMPARE(model->eventAt(0)->id,std::uint64_t(2));
+        QTest::mouseClick(panel.findChild<QPushButton*>("eventReset"),Qt::LeftButton);
+        QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),2,5000); QSignalSpy activated(&panel,&EventExplorer::eventActivated);
+        QTest::keyClick(search,Qt::Key_F3); QTRY_COMPARE(activated.count(),1);
+        auto* table=panel.findChild<QTableView*>("eventResults"); QCOMPARE(table->currentIndex().row(),0);
+        QTest::keyClick(search,Qt::Key_F3); QTRY_COMPARE(activated.count(),2); QCOMPARE(table->currentIndex().row(),1);
+        QTest::keyClick(search,Qt::Key_F3,Qt::ShiftModifier); QTRY_COMPARE(activated.count(),3); QCOMPARE(table->currentIndex().row(),0);
+    }
     /// 表格导航只在目标轨道离开视野时最小滚动，已可见行不跳到顶端。
     void selectedTrackScrollsOnlyWhenOutsideViewport() {
         TimelineWidget widget; widget.resize(1000,360); widget.show();

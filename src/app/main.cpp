@@ -3,6 +3,7 @@
 #include "ui_widgets/main_window.h"
 #include "ui_widgets/event_explorer.h"
 #include "ui_widgets/frame_details_panel.h"
+#include "ui_widgets/theme.h"
 #include <QApplication>
 #include <QTimer>
 #include <QFile>
@@ -15,6 +16,8 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     app.setApplicationName("GPUView");
     app.setApplicationVersion("0.4.0");
+    // Fusion以Qt调色板绘制标准控件，使深色箭头/复选框跨系统主题保持可见。
+    app.setStyle(QStringLiteral("Fusion")); app.setPalette(gpuview::darkPalette());
     // Windows离屏平台不一定自动枚举系统字体；只读取本机字体，不打包分发字体文件。
 #ifdef Q_OS_WIN
     const auto fontPath = QDir(qEnvironmentVariable("SystemRoot", "C:/Windows")).filePath("Fonts/msyh.ttc");

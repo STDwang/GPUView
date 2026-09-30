@@ -41,3 +41,15 @@
 [MainWindow](../../src/ui_widgets/main_window.cpp)保存初始Dock状态，一键恢复时不重置会话、搜索和窗口尺寸，帧面板是否可用仍取决于数据类型；空闲时隐藏加载进度。轨道过滤只经selectionCleared的统一连接请求统计，去掉重复发起/取消任务。
 
 验证：selectedTrackScrollsOnlyWhenOutsideViewport检查视野内不发滚动通知、向下/上只滚动到边缘；defaultLayoutPreservesDataAndFilters检查移动/隐藏Dock后恢复、源快照身份和5000条Kernel搜索结果保留。Debug/Release通过61个实际用例。布局只保存在窗口内，尚未跨进程记忆个人布局。
+
+## 第四轮：输入合并不等于所有操作延迟（Q04）
+
+面试问题：算法只用了几毫秒，为什么点排序还感到延迟？
+
+复现：原schedule对表头点击和连续打字都等待180ms；在汇总排序降到约8ms后，这段固定等待成为明显的额外成本。
+
+解决思路：[EventExplorer::submitNow](../../src/ui_widgets/event_explorer.cpp)仍先schedule取消旧代次和清空过期行，但立即停止定时器并submit；表头、回车、重置使用它，名称/时长编辑仍合并输入。F3和Shift+F3复用现有navigate，按钮禁用时快捷键也不可激活。上限小于下限在GUI直接中文提示并释放缓存，不启动必然报错的Worker；core仍独立验证，不能以UI校验代替核心边界。
+
+视觉细节：[DurationSpinBox](../../src/ui_widgets/duration_spin_box.cpp)仅补画矢量箭头，按钮矩形取自QStyle，输入/点击/键盘语义仍由QDoubleSpinBox负责；不引入SVG图像插件或逐帧对象。Fusion和统一调色板用于标准控件，样式表显式区分箭头按钮可用/禁用/悬停背景。
+
+验证：searchValidationAndKeyboardNavigation通过实际键盘事件检查非法提示、恢复查询、F3下一项和Shift+F3上一项；本轮最终62个实际用例（Core47+UI15），Release界面截图已目视检查箭头和结果行。没有把移除固定等待宣称为端到端P95；高DPI人工验收仍待进行。
