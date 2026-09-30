@@ -57,7 +57,11 @@ void TimelineWidget::previousView() {
 void TimelineWidget::selectEvent(const Event& event) {
     const auto it = std::find(tracks_.begin(), tracks_.end(), event.track);
     if (it == tracks_.end()) return;
-    setFirstTrack(int(it - tracks_.begin())); selectedEvent_ = event; publishEvent(event);
+    const int target=int(it-tracks_.begin());
+    // 已可见的轨道保持原位；越界时只滚动到最近边缘，避免逐条浏览造成整屏跳动。
+    if(target<int(firstTrack_)) setFirstTrack(target);
+    else if(target>=int(firstTrack_)+visibleTrackCount()) setFirstTrack(target-visibleTrackCount()+1);
+    selectedEvent_ = event; publishEvent(event);
     update();
 }
 /// 清除事件选择，设置纳秒选区并缩放，随后发布统计请求。

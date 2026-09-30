@@ -32,7 +32,7 @@ namespace gpuview {
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("GPUView · 性能分析与学习工作台")); resize(1440, 920);
     setStyleSheet(darkTheme());
-    auto* toolbar = addToolBar(QStringLiteral("数据与视图")); toolbar->setMovable(false);
+    auto* toolbar = addToolBar(QStringLiteral("数据与视图")); toolbar->setObjectName("mainToolbar"); toolbar->setMovable(false);
     // 文件对话框只采集路径，真正读取交给会话控制器，GUI不解析CSV。
     toolbar->addAction(QStringLiteral("导入 CSV"), this, [this] {
         const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("PresentMon v1 CSV（TimeInSeconds + MsBetweenPresents）"), {}, "CSV (*.csv)");
@@ -50,7 +50,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     toolbar->addAction(QStringLiteral("缩放到选区"), this, [this] { timeline_->zoomSelection(); });
     // 调用有限视图历史，恢复上一次时间范围。
     toolbar->addAction(QStringLiteral("上一视图"), this, [this] { timeline_->previousView(); });
-    auto* progress = new QProgressBar; progress->setMaximumWidth(100); progress->setRange(0,100); progress->setValue(0); toolbar->addWidget(progress);
+    auto* progress = new QProgressBar; progress->setObjectName("loadProgress"); progress->setMaximumWidth(100);
+    progress->setRange(0,100); progress->setValue(0); auto* progressAction=toolbar->addWidget(progress); progressAction->setVisible(false);
     auto* central = new QWidget; auto* layout = new QVBoxLayout(central);
     auto* heading = new QLabel(QStringLiteral("GPUView / TRACE LAB · 尚未加载数据")); heading->setWordWrap(true);
     heading->setStyleSheet(QStringLiteral("color:#55dabb;padding:8px;font-weight:600;")); layout->addWidget(heading);
@@ -93,7 +94,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* sourceInfo = new QTextBrowser; tabs->addTab(sourceInfo,QStringLiteral("来源")); detailDock->setWidget(tabs); addDockWidget(Qt::RightDockWidgetArea,detailDock);
     auto* tracksDock = new QDockWidget(QStringLiteral("轨道导航"),this); tracksDock->setObjectName("tracksDock");
     auto* tracksPage = new QWidget; auto* tracksLayout = new QVBoxLayout(tracksPage);
-    auto* filter = new QLineEdit; filter->setPlaceholderText(QStringLiteral("按轨道名称过滤")); filter->setObjectName("trackFilter"); tracksLayout->addWidget(filter);
+    auto* filter = new QLineEdit; filter->setPlaceholderText(QStringLiteral("按轨道名称过滤")); filter->setObjectName("trackFilter");
+    filter->setClearButtonEnabled(true); tracksLayout->addWidget(filter);
     auto* tree = new QTreeWidget; tree->setObjectName("trackTree"); tree->setHeaderHidden(true); tree->setMinimumWidth(175); tracksLayout->addWidget(tree);
     tracksDock->setWidget(tracksPage); addDockWidget(Qt::LeftDockWidgetArea,tracksDock);
     auto* framesDock = new QDockWidget(QStringLiteral("帧明细 / 分析导出"),this); framesDock->setObjectName("framesDock");
@@ -113,6 +115,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         eventsDock->show(); eventsDock->raise(); explorer->focusSearch();
     });
     searchAction->setObjectName("searchEventsAction"); searchAction->setShortcut(QKeySequence::Find);
+    // 保存出厂Dock状态，不写个人配置；恢复不改会话、选区、搜索条件或窗口尺寸。
+    const auto defaultLayout=saveState(1);
+    auto* resetLayout=viewMenu->addAction(QStringLiteral("恢复默认面板布局"),this,[this,defaultLayout,framesDock,eventsDock] {
+        restoreState(defaultLayout,1);
+        framesDock->setVisible(controller_.snapshot() && controller_.snapshot()->frames);
+        eventsDock->show(); eventsDock->raise();
+    });
+    resetLayout->setObjectName("resetLayoutAction");
     auto range = std::make_shared<std::optional<TimeRange>>();
     auto sortState = std::make_shared<std::pair<FrameSort,bool>>(FrameSort::Start,false);
     // 统一汇总当前快照、轨道、组选项、范围和排序；先清空旧范围显示，再发后台统计请求。
@@ -132,7 +142,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         statistics_.request(snapshot, range->value_or(snapshot->bounds), std::move(tracks),sortState->first,sortState->second);
     };
     // 名称过滤、勾选和折叠共同产生源轨道ID列表；清除旧选区并重算当前显示数据统计。
-    auto filterTracks = [this,tree,filter,range,requestStats] {
+    auto filterTracks = [this,tree,filter,range] {
         std::vector<std::uint32_t> visible;
         for (int g=0; g<tree->topLevelItemCount(); ++g) {
             auto* parent = tree->topLevelItem(g);
@@ -143,7 +153,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                 if (matches && parent->isExpanded() && item->checkState(0)==Qt::Checked) visible.push_back(item->data(0,Qt::UserRole).toUInt());
             }
         }
-        range->reset(); timeline_->setTracks(std::move(visible)); requestStats();
+        // setTracks发出selectionCleared，由统一连接请求统计；这里不重复启动再取消一份任务。
+        range->reset(); timeline_->setTracks(std::move(visible));
     };
     // 输入变化重新应用统一过滤逻辑，不在回调中复制筛选规则。
     connect(filter,&QLineEdit::textChanged,this,[filterTracks] { filterTracks(); });
@@ -221,7 +232,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // 把加载失败/取消等状态转为界面提示，不清空旧成功快照。
     connect(&controller_,&SessionController::message,this,[state](const QString& text) { state->setText(text); });
     // 同步取消按钮和进度条忙闲；保留已有错误提示，不用通用“就绪”覆盖。
-    connect(&controller_,&SessionController::busyChanged,this,[cancel,progress,state](bool busy) {
+    connect(&controller_,&SessionController::busyChanged,this,[cancel,progress,progressAction,state](bool busy) {
+        progressAction->setVisible(busy);
         cancel->setEnabled(busy); if(busy) { state->setText(QStringLiteral("后台加载中 · 可取消")); progress->setRange(0,0); }
         else { progress->setRange(0,100); progress->setValue(0); if(state->text().startsWith(QStringLiteral("后台"))) state->setText(QStringLiteral("就绪")); }
     });

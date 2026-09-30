@@ -21,11 +21,43 @@
 #include <QAbstractItemModelTester>
 #include <QAction>
 #include <QCheckBox>
+#include <QProgressBar>
 using namespace gpuview;
 /// Qt Test界面回归集合；在离屏环境模拟输入并断言可观察状态。
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 表格导航只在目标轨道离开视野时最小滚动，已可见行不跳到顶端。
+    void selectedTrackScrollsOnlyWhenOutsideViewport() {
+        TimelineWidget widget; widget.resize(1000,360); widget.show();
+        const auto source=generateTrace(10000,1); widget.setSnapshot(source); widget.setFirstTrack(10);
+        QSignalSpy scroll(&widget,&TimelineWidget::trackScrollChanged);
+        widget.selectEvent(source->tracks[12].index.events().front()); QCOMPARE(scroll.count(),0);
+        widget.selectEvent(source->tracks[24].index.events().front()); QCOMPARE(scroll.count(),1);
+        QCOMPARE(scroll.last().at(0).toInt(),15);
+        widget.selectEvent(source->tracks[3].index.events().front()); QCOMPARE(scroll.count(),2);
+        QCOMPARE(scroll.last().at(0).toInt(),3);
+    }
+    /// 恢复布局不换会话、不清筛选；空闲加载进度隐藏，恢复的帧Dock遵守当前数据类型。
+    void defaultLayoutPreservesDataAndFilters() {
+        MainWindow window; window.show(); QVERIFY(!window.findChild<QProgressBar*>("loadProgress")->isVisible());
+        window.controller()->requestSynthetic(10000);
+        auto* model=window.findChild<EventAnalysisModel*>("eventResultsModel");
+        QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),10000,5000);
+        QVERIFY(!window.findChild<QProgressBar*>("loadProgress")->isVisible());
+        const auto source=window.controller()->snapshot();
+        window.findChild<QLineEdit*>("eventSearch")->setText("Kernel");
+        QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),5000,5000);
+        auto* tracks=window.findChild<QDockWidget*>("tracksDock");
+        window.addDockWidget(Qt::RightDockWidgetArea,tracks); tracks->hide();
+        window.findChild<QDockWidget*>("eventsDock")->hide();
+        auto* action=window.findChild<QAction*>("resetLayoutAction"); QVERIFY(action); action->trigger();
+        QCOMPARE(window.dockWidgetArea(tracks),Qt::LeftDockWidgetArea); QVERIFY(tracks->isVisible());
+        QVERIFY(window.findChild<QDockWidget*>("eventsDock")->isVisible());
+        QVERIFY(!window.findChild<QDockWidget*>("framesDock")->isVisible());
+        QCOMPARE(window.controller()->snapshot(),source); QCOMPARE(model->rowCount(),5000);
+        QCOMPARE(window.findChild<QLineEdit*>("eventSearch")->text(),QString("Kernel"));
+    }
     /// 搜索模型契约、名称筛选、排序后ID、汇总和空结果导航均通过真实GUI输入验证。
     void eventExplorerSearchSortAndNavigation() {
         EventExplorer panel; panel.resize(1100,320); panel.show();

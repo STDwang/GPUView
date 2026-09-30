@@ -29,3 +29,15 @@
 证据：新增eventSortReuseMatchesColdAndInvalidates逐行比对冷热结果，遍历全部排序列与方向、7项筛选/身份变化；eventControllerReuseAndRelease验证弱引用释放；UI排序用例断言实际命中复用。Debug/Release均通过59个实际用例（Core47+UI12）。[同机基准](../../benchmarks/reports/EVENT_SORT.md)记录原始40条测量。
 
 30秒讲述：我把筛选键和排序键分开，先证明冷计算与复用结果逐行一致，再用同一程序交替测量。百万事件只改名称汇总排序从200.30ms降至7.84ms；事件时长排序没有改善，所以结论只覆盖汇总排序。代价是复制新结果的O(N)内存，不能把单项缓存说成零复制。
+
+## 第三轮：联动导航与可恢复布局
+
+面试问题：多视图联动正确了，为什么使用时还会觉得跳动？
+
+复现：表格切换到当前已经可见的另一条轨道，以前selectEvent仍将它移到首行，用户失去相邻轨道的空间参照。
+
+解决思路：[TimelineWidget::selectEvent](../../src/ui_widgets/timeline_widget.cpp)只在target小于first或大于等于first+page时滚动；向下滚动的首行取target-page+1。选择和高亮仍按源事件ID，不改变时间视口或分析范围。
+
+[MainWindow](../../src/ui_widgets/main_window.cpp)保存初始Dock状态，一键恢复时不重置会话、搜索和窗口尺寸，帧面板是否可用仍取决于数据类型；空闲时隐藏加载进度。轨道过滤只经selectionCleared的统一连接请求统计，去掉重复发起/取消任务。
+
+验证：selectedTrackScrollsOnlyWhenOutsideViewport检查视野内不发滚动通知、向下/上只滚动到边缘；defaultLayoutPreservesDataAndFilters检查移动/隐藏Dock后恢复、源快照身份和5000条Kernel搜索结果保留。Debug/Release通过61个实际用例。布局只保存在窗口内，尚未跨进程记忆个人布局。
