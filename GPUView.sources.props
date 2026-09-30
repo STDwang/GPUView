@@ -42,6 +42,8 @@
     <ClInclude Include="src\ui_widgets\frame_time_widget.h" />
     <ClCompile Include="src\ui_widgets\main_window.cpp" />
     <ClInclude Include="src\ui_widgets\main_window.h" />
+    <ClCompile Include="src\ui_widgets\theme.cpp" />
+    <ClInclude Include="src\ui_widgets\theme.h" />
     <ClCompile Include="src\ui_widgets\timeline_widget.cpp" />
     <ClInclude Include="src\ui_widgets\timeline_widget.h" />
     <ClCompile Include="tests\core\core_tests.cpp" />

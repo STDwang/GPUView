@@ -1,6 +1,7 @@
 /// @file src/ui_widgets/main_window.cpp
 /// @brief Widgets应用组装入口；连接导航、时间轴、统计与导出，不直接解析文件或跑重计算。
 #include "ui_widgets/main_window.h"
+#include "ui_widgets/theme.h"
 #include "ui_widgets/frame_time_widget.h"
 #include "ui_widgets/frame_details_panel.h"
 #include "ui_widgets/event_explorer.h"
@@ -25,11 +26,12 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QMenuBar>
+#include <QAction>
 namespace gpuview {
 /// 组装Dock、工具栏及连接；只协调界面，解析与大规模计算交给后台模块。
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("GPUView · 性能分析与学习工作台")); resize(1440, 920);
-    setStyleSheet(QStringLiteral("QMainWindow,QWidget{background:#101923;color:#d7e4ee;} QToolBar{background:#1b2a38;padding:6px;spacing:8px;} QToolButton,QPushButton{padding:6px;border:1px solid #385367;border-radius:4px;} QToolButton:hover,QPushButton:hover{background:#2c4f63;} QDockWidget::title{background:#203343;padding:7px;} QTextBrowser{background:#162330;border:0;padding:8px;} QStatusBar{background:#172532;} QLineEdit,QComboBox{padding:5px;border:1px solid #385367;} QTreeWidget,QTableWidget,QTableView{alternate-background-color:#182431;} QTabBar::tab{padding:8px;} QTabBar::tab:selected{background:#2c4f63;} QScrollBar:vertical{background:#0b121a;width:20px;margin:0;border:1px solid #35495a;border-radius:6px;} QScrollBar::handle:vertical{background:#7896ad;min-height:40px;margin:2px;border-radius:5px;} QScrollBar::handle:vertical:hover{background:#a5c9e0;} QScrollBar::handle:vertical:pressed{background:#55dabb;} QScrollBar::handle:vertical:disabled{background:#243442;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;border:0;background:transparent;} QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{background:transparent;}"));
+    setStyleSheet(darkTheme());
     auto* toolbar = addToolBar(QStringLiteral("数据与视图")); toolbar->setMovable(false);
     // 文件对话框只采集路径，真正读取交给会话控制器，GUI不解析CSV。
     toolbar->addAction(QStringLiteral("导入 CSV"), this, [this] {
@@ -106,6 +108,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(timeline_,&TimelineWidget::eventPicked,explorer,[explorer](qulonglong id,const QString&) { if(id) explorer->selectId(id); });
     auto* viewMenu = menuBar()->addMenu(QStringLiteral("视图"));
     viewMenu->addAction(tracksDock->toggleViewAction()); viewMenu->addAction(detailDock->toggleViewAction()); viewMenu->addAction(framesDock->toggleViewAction()); viewMenu->addAction(eventsDock->toggleViewAction());
+    // 窗口级搜索入口先恢复可能关闭的Dock，再聚焦输入，避免隐藏面板吞掉快捷键。
+    auto* searchAction=viewMenu->addAction(QStringLiteral("搜索事件"),this,[eventsDock,explorer] {
+        eventsDock->show(); eventsDock->raise(); explorer->focusSearch();
+    });
+    searchAction->setObjectName("searchEventsAction"); searchAction->setShortcut(QKeySequence::Find);
     auto range = std::make_shared<std::optional<TimeRange>>();
     auto sortState = std::make_shared<std::pair<FrameSort,bool>>(FrameSort::Start,false);
     // 统一汇总当前快照、轨道、组选项、范围和排序；先清空旧范围显示，再发后台统计请求。

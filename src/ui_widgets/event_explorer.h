@@ -48,6 +48,8 @@ public:
     void setContext(Snapshot source,std::vector<std::uint32_t> tracks,std::optional<TimeRange> selection);
     /// 以稳定ID选择事件，信号阻断避免双向联动递归。
     void selectId(std::uint64_t id);
+    /// 将键盘焦点移到名称输入并选中文字，供窗口搜索快捷键调用。
+    void focusSearch();
 signals:
     /// 单击事件高亮时间轴，不改变分析范围。
     void eventSelected(const gpuview::Event& event);
@@ -58,6 +60,8 @@ private:
     void schedule();
     /// 读取GUI条件并冻结为纯数据参数发送Worker。
     void submit();
+    /// 批量恢复筛选默认值，只发起一次新查询，保留用户排序。
+    void resetFilters();
     /// 在当前排序中循环导航；空结果不执行。
     void navigate(int step);
     /// 控制导航和取消按钮状态，避免空表仍可点击。

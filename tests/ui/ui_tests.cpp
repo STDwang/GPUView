@@ -19,6 +19,8 @@
 #include <QDoubleSpinBox>
 #include <QTableView>
 #include <QAbstractItemModelTester>
+#include <QAction>
+#include <QCheckBox>
 using namespace gpuview;
 /// Qt Test界面回归集合；在离屏环境模拟输入并断言可观察状态。
 class UiTests : public QObject {
@@ -45,12 +47,25 @@ private slots:
         panel.findChild<QLineEdit*>("eventSearch")->setText("absent");
         QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.text=="absent",5000);
         QCOMPARE(model->rowCount(),0); QVERIFY(!panel.findChild<QPushButton*>("eventNext")->isEnabled());
+        panel.findChild<QDoubleSpinBox*>("eventMinimum")->setValue(1);
+        panel.findChild<QDoubleSpinBox*>("eventMaximum")->setValue(2);
+        panel.findChild<QCheckBox*>("eventSelectionOnly")->setChecked(false);
+        QTest::mouseClick(panel.findChild<QPushButton*>("eventReset"),Qt::LeftButton);
+        QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.text.empty(),5000);
+        QCOMPARE(model->rowCount(),1); QCOMPARE(model->result()->filter.minimum,TimeNs(0));
+        QVERIFY(!model->result()->filter.maximum); QCOMPARE(model->result()->filter.eventColumn,4);
+        QCOMPARE(model->data(model->index(0,4),Qt::TextAlignmentRole).toInt(),int(Qt::AlignRight|Qt::AlignVCenter));
     }
     /// 主窗口把搜索结果ID映射回时间轴，框选范围也传递给独立搜索面板。
     void eventExplorerWindowLink() {
         MainWindow window; window.show(); window.controller()->requestSynthetic(100000);
         auto* explorer=window.findChild<EventExplorer*>(); auto* model=explorer->findChild<EventAnalysisModel*>("eventResultsModel");
         QTRY_VERIFY_WITH_TIMEOUT(model->rowCount()>0,5000);
+        auto* dock=window.findChild<QDockWidget*>("eventsDock"); dock->hide();
+        auto* search=window.findChild<QAction*>("searchEventsAction"); QVERIFY(search);
+        QCOMPARE(search->shortcut(),QKeySequence(QKeySequence::Find)); search->trigger();
+        QVERIFY(dock->isVisible());
+        QTRY_VERIFY(explorer->findChild<QLineEdit*>("eventSearch")->hasFocus());
         const auto id=model->eventAt(0)->id;
         auto* table=explorer->findChild<QTableView*>("eventResults"); table->setCurrentIndex(model->index(0,0));
         QVERIFY(window.timeline()->selectedEvent()); QCOMPARE(window.timeline()->selectedEvent()->id,id);

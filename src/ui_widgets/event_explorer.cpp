@@ -31,6 +31,10 @@ QVariant EventAnalysisModel::data(const QModelIndex& index,int role) const {
     if(!index.isValid() || index.column()<0 || index.column()>=columnCount()) return {};
     const auto* event=eventAt(index.row()); if(!event) return {};
     if(role==Qt::UserRole) return QVariant::fromValue(qulonglong(event->id));
+    if(role==Qt::TextAlignmentRole) {
+        const bool number=groups_?index.column()>0:(index.column()==0 || index.column()>=3);
+        return int((number?Qt::AlignRight:Qt::AlignLeft)|Qt::AlignVCenter);
+    }
     if(role!=Qt::DisplayRole && role!=Qt::ToolTipRole) return {};
     if(groups_) {
         const auto& group=result_->groups[std::size_t(index.row())];
@@ -69,9 +73,12 @@ void EventAnalysisModel::sort(int column,Qt::SortOrder order) {
 EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     setObjectName("eventExplorer");
     setToolTip(QStringLiteral("筛选只作用于本面板；现有帧分析导出仍使用统计页的组和选区，不包含这里的名称/时长筛选。"));
-    auto* layout=new QVBoxLayout(this); auto* controls=new QHBoxLayout;
+    auto* layout=new QVBoxLayout(this); auto* searchRow=new QHBoxLayout; auto* controls=new QHBoxLayout;
     text_=new QLineEdit; text_->setObjectName("eventSearch");
-    text_->setPlaceholderText(QStringLiteral("事件名称（区分大小写，字面包含）")); controls->addWidget(text_,2);
+    text_->setPlaceholderText(QStringLiteral("搜索事件名称 · 区分大小写 · Ctrl+F")); text_->setClearButtonEnabled(true);
+    text_->setAccessibleName(QStringLiteral("搜索事件名称")); searchRow->addWidget(text_,1);
+    auto* reset=new QPushButton(QStringLiteral("重置筛选")); reset->setObjectName("eventReset");
+    reset->setToolTip(QStringLiteral("清空名称和时长条件，恢复仅选区；保留当前排序。")); searchRow->addWidget(reset);
     minimum_=new QDoubleSpinBox; maximum_=new QDoubleSpinBox;
     minimum_->setObjectName("eventMinimum"); maximum_->setObjectName("eventMaximum");
     for(auto* spin:{minimum_,maximum_}) { spin->setRange(0,1e9); spin->setDecimals(6); spin->setSuffix(" ms"); }
@@ -83,7 +90,8 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     previous_=new QPushButton(QStringLiteral("上一条")); next_=new QPushButton(QStringLiteral("下一条"));
     previous_->setObjectName("eventPrevious"); next_->setObjectName("eventNext");
     cancel_=new QPushButton(QStringLiteral("取消")); cancel_->setObjectName("eventCancel");
-    controls->addWidget(previous_); controls->addWidget(next_); controls->addWidget(cancel_); layout->addLayout(controls);
+    searchRow->addWidget(previous_); searchRow->addWidget(next_); searchRow->addWidget(cancel_);
+    controls->addStretch(); layout->addLayout(searchRow); layout->addLayout(controls);
     status_=new QLabel(QStringLiteral("加载数据后可搜索事件")); status_->setWordWrap(true); layout->addWidget(status_);
     events_=new EventAnalysisModel(false,this); groups_=new EventAnalysisModel(true,this);
     events_->setObjectName("eventResultsModel"); groups_->setObjectName("eventGroupsModel");
@@ -94,15 +102,21 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
         table->setSelectionBehavior(QAbstractItemView::SelectRows); table->setSelectionMode(QAbstractItemView::SingleSelection);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->setAlternatingRowColors(true);
         table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+        table->verticalHeader()->setDefaultSectionSize(30); table->setShowGrid(false);
         table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         table->setSortingEnabled(true);
     }
     table_->sortByColumn(3,Qt::AscendingOrder); summary_->sortByColumn(2,Qt::DescendingOrder);
-    auto* tabs=new QTabWidget; tabs->addTab(table_,QStringLiteral("事件")); tabs->addTab(summary_,QStringLiteral("按名称汇总 · 双击定位最大项"));
+    auto* tabs=new QTabWidget; tabs->addTab(table_,QStringLiteral("事件明细")); tabs->addTab(summary_,QStringLiteral("名称汇总"));
+    tabs->setTabToolTip(0,QStringLiteral("单击高亮，双击定位；上下条按当前事件排序循环。"));
+    tabs->setTabToolTip(1,QStringLiteral("同名事件聚合；双击定位贡献最大项。并发时长求和不是利用率。"));
     layout->addWidget(tabs,1);
     debounce_.setSingleShot(true); debounce_.setInterval(180);
     connect(&debounce_,&QTimer::timeout,this,&EventExplorer::submit);
     connect(text_,&QLineEdit::textChanged,this,&EventExplorer::schedule);
+    connect(reset,&QPushButton::clicked,this,&EventExplorer::resetFilters);
+    // 回车立即提交，停止防抖计时，避免同一输入重复提交。
+    connect(text_,&QLineEdit::returnPressed,this,[this] { schedule(); debounce_.stop(); submit(); });
     connect(minimum_,&QDoubleSpinBox::valueChanged,this,&EventExplorer::schedule);
     connect(maximum_,&QDoubleSpinBox::valueChanged,this,&EventExplorer::schedule);
     connect(selectedOnly_,&QCheckBox::toggled,this,&EventExplorer::schedule);
@@ -136,17 +150,26 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
         const auto result=controller_.result(); events_->setResult(result); groups_->setResult(result);
         if(selectedId_) selectId(*selectedId_);
         setReady(true); cancel_->setEnabled(false);
-        status_->setText(QStringLiteral("%1 · %2 条事件 / %3 个名称 · 范围 [%4, %5) ms · %6。单击高亮，双击定位；上下条按当前排序循环。")
+        status_->setText(QStringLiteral("%1 · %2 条事件 / %3 个名称 · [%4, %5) ms · %6")
             .arg(result->source->synthetic?QStringLiteral("教学模拟"):QStringLiteral("外部输入"))
             .arg(qulonglong(result->rows.size())).arg(qulonglong(result->groups.size()))
             .arg(double(result->filter.range.begin)/1e6,0,'f',3).arg(double(result->filter.range.end)/1e6,0,'f',3)
-            .arg(result->source->frames?QStringLiteral("Present归属，贡献为完整间隔，非GPU时长"):
-                QStringLiteral("Trace贡献按选区裁剪，并发求和非利用率")));
+            .arg(result->rows.empty()?QStringLiteral("无匹配，请调整筛选"):QStringLiteral("单击高亮 · 双击定位")));
+        status_->setToolTip(result->source->frames?QStringLiteral("Present归属，贡献为完整间隔，非GPU时长。"):
+            QStringLiteral("Trace贡献按选区裁剪，并发求和非利用率。"));
     });
     connect(&controller_,&EventAnalysisController::failed,this,[this](const QString& error) {
         setReady(false); cancel_->setEnabled(false); status_->setText(QStringLiteral("搜索失败：")+error);
     });
     setReady(false); cancel_->setEnabled(false);
+}
+/// 聚焦而不改动条件或发起查询，保留当前结果。
+void EventExplorer::focusSearch() { text_->setFocus(Qt::ShortcutFocusReason); text_->selectAll(); }
+/// 阻断四个输入的逐项通知，批量重置后仅调度一次。
+void EventExplorer::resetFilters() {
+    const QSignalBlocker textBlock(text_),minimumBlock(minimum_),maximumBlock(maximum_),selectionBlock(selectedOnly_);
+    text_->clear(); minimum_->setValue(0); maximum_->setValue(0); selectedOnly_->setChecked(true);
+    schedule(); focusSearch();
 }
 /// 相同上下文不因帧表独立排序而重复搜索，换会话不继承旧ID。
 void EventExplorer::setContext(Snapshot source,std::vector<std::uint32_t> tracks,std::optional<TimeRange> selection) {
