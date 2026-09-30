@@ -8,8 +8,9 @@ EventAnalysisController::~EventAnalysisController() {
     if(worker_) { disconnect(worker_,nullptr,this,nullptr); worker_->wait(); delete worker_; }
 }
 /// 代次失效和原子取消同时执行，即使Worker刚完成也不能发布旧结果。
-void EventAnalysisController::cancel() {
+void EventAnalysisController::cancel(bool preserveCache) {
     ++generation_; pending_.take(); result_.reset();
+    if(!preserveCache) cache_.reset();
     if(cancel_) cancel_->store(true,std::memory_order_relaxed);
 }
 /// 最新请求最多占一个待办；不复用旧Worker中的可变筛选参数。
@@ -20,11 +21,13 @@ void EventAnalysisController::request(Snapshot source,EventFilter filter) {
 }
 /// Worker按值捕获源数据，完成后GUI以generation决定是否发布。
 void EventAnalysisController::start(Request request) {
+    if(!canReuseEventSelection(cache_,request.source,request.filter)) cache_.reset();
+    const auto previous=cache_;
     cancel_=std::make_shared<std::atomic_bool>(false);
     const auto cancel=cancel_; auto result=std::make_shared<EventAnalysisPtr>(); auto error=std::make_shared<QString>();
     // 生产者只计算结果容器，不读取任何控件状态。
-    worker_=QThread::create([request,cancel,result,error] {
-        try { *result=analyzeEvents(request.source,request.filter,cancel); }
+    worker_=QThread::create([request,cancel,result,error,previous] {
+        try { *result=analyzeEvents(request.source,request.filter,cancel,previous); }
         catch(const Cancelled&) {}
         catch(const std::exception& e) { *error=QString::fromUtf8(e.what()); }
     });
@@ -33,7 +36,7 @@ void EventAnalysisController::start(Request request) {
     connect(thread,&QThread::finished,this,[this,thread,result,error,generation=request.generation] {
         thread->wait(); worker_=nullptr; thread->deleteLater();
         if(generation==generation_) {
-            if(*result) { result_=*result; emit ready(); }
+            if(*result) { result_=*result; cache_=*result; emit ready(); }
             else if(!error->isEmpty()) emit failed(*error);
         }
         if(auto next=pending_.take()) start(std::move(*next));

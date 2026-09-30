@@ -57,11 +57,16 @@ struct EventAnalysis {
     std::vector<NameSummary> groups;
     /// 按ID排序的ID到当前行映射，避免GUI线性扫描百万结果。
     std::vector<std::pair<std::uint64_t,int>> idRows;
+    /// 本次是否复用相同筛选的扫描/聚合结果；仅用于诊断，不代表零复制。
+    bool reusedSelection = false;
     /// 二分查稳定ID；不存在返回-1。
     int rowForId(std::uint64_t id) const;
 };
 /// 跨线程只读结果句柄，发布后只替换指针不修改内部数据。
 using EventAnalysisPtr = std::shared_ptr<const EventAnalysis>;
+/// 快照身份和全部筛选条件精确一致才可复用；排序键不参与，轨道顺序不同保守视为失效。
+bool canReuseEventSelection(const EventAnalysisPtr& previous,const Snapshot& source,const EventFilter& filter);
 /// 后台扫描/聚合/排序，非法条件抛异常；各长循环均支持协作取消。
-EventAnalysisPtr analyzeEvents(Snapshot source, EventFilter filter, const CancelFlag& cancel = {});
+EventAnalysisPtr analyzeEvents(Snapshot source, EventFilter filter, const CancelFlag& cancel = {},
+    const EventAnalysisPtr& previous = {});
 }

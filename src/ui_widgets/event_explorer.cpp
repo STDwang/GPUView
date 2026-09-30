@@ -175,12 +175,12 @@ void EventExplorer::resetFilters() {
 void EventExplorer::setContext(Snapshot source,std::vector<std::uint32_t> tracks,std::optional<TimeRange> selection) {
     const bool sameSelection=(!selection_ && !selection) || (selection_ && selection && *selection_==*selection);
     if(source_==source && tracks_==tracks && sameSelection) return;
-    if(source_!=source) selectedId_.reset();
+    if(source_!=source) { selectedId_.reset(); controller_.cancel(); }
     source_=std::move(source); tracks_=std::move(tracks); selection_=selection; schedule();
 }
 /// 新输入立即失效旧结果，不能在防抖等待期间点击过期行。
 void EventExplorer::schedule() {
-    controller_.cancel(); debounce_.stop();
+    controller_.cancel(true); debounce_.stop();
     const QSignalBlocker block(table_->selectionModel()); events_->setResult({}); groups_->setResult({});
     setReady(false); cancel_->setEnabled(bool(source_));
     status_->setText(source_?QStringLiteral("后台搜索中… 修改条件只保留最新请求。"):QStringLiteral("尚无数据"));

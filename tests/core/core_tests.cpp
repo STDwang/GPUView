@@ -24,6 +24,63 @@ using namespace gpuview;
 class CoreTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 冷计算与复用排序逐行一致；筛选每个组成部分或快照身份变化都必须失效。
+    void eventSortReuseMatchesColdAndInvalidates() {
+        auto source=generateTrace(10021,1); EventFilter filter; filter.range=source->bounds;
+        for(std::uint32_t i=0;i<source->tracks.size();++i) filter.tracks.push_back(i);
+        const auto base=analyzeEvents(source,filter); const auto firstId=base->rows.front().event->id;
+        // 完整比对排序、贡献、ID映射和汇总，不仅检查首末行。
+        const auto equivalent=[](const EventAnalysisPtr& a,const EventAnalysisPtr& b) {
+            QCOMPARE(a->rows.size(),b->rows.size()); QCOMPARE(a->idRows,b->idRows);
+            for(std::size_t i=0;i<a->rows.size();++i) {
+                QCOMPARE(a->rows[i].event->id,b->rows[i].event->id);
+                QCOMPARE(a->rows[i].contribution,b->rows[i].contribution);
+            }
+            QCOMPARE(a->groups.size(),b->groups.size());
+            for(std::size_t i=0;i<a->groups.size();++i) {
+                QCOMPARE(a->groups[i].name,b->groups[i].name); QCOMPARE(a->groups[i].count,b->groups[i].count);
+                QCOMPARE(a->groups[i].totalMs,b->groups[i].totalMs); QCOMPARE(a->groups[i].maximum,b->groups[i].maximum);
+                QCOMPARE(a->groups[i].representative->id,b->groups[i].representative->id);
+            }
+        };
+        for(bool descending:{false,true}) for(int column=0;column<6;++column) {
+            auto changed=filter; changed.eventColumn=column; changed.eventDescending=descending;
+            changed.groupColumn=column%5; changed.groupDescending=descending;
+            const auto reused=analyzeEvents(source,changed,{},base); QVERIFY(reused->reusedSelection);
+            equivalent(reused,analyzeEvents(source,changed));
+        }
+        for(int key=0;key<7;++key) {
+            auto changed=filter; auto input=source;
+            switch(key) {
+            case 0:changed.text="Kernel"; break;
+            case 1:++changed.range.begin; break;
+            case 2:--changed.range.end; break;
+            case 3:changed.tracks.pop_back(); break;
+            case 4:changed.minimum=1000000; break;
+            case 5:changed.maximum=1000000; break;
+            default:input=generateTrace(10021,1); break; // 相同版本仍是不同快照。
+            }
+            const auto result=analyzeEvents(input,changed,{},base); QVERIFY(!result->reusedSelection);
+            equivalent(result,analyzeEvents(input,changed));
+        }
+        QCOMPARE(base->rows.front().event->id,firstId); QVERIFY(!base->reusedSelection);
+        auto flag=std::make_shared<std::atomic_bool>(true);
+        QVERIFY_THROWS_EXCEPTION(Cancelled,analyzeEvents(source,filter,flag,base));
+        filter.eventColumn=99; QVERIFY_THROWS_EXCEPTION(std::invalid_argument,analyzeEvents(source,filter,{},base));
+    }
+    /// 防抖取消保留单项缓存，显式取消释放；只有最新成功结果可以进入缓存。
+    void eventControllerReuseAndRelease() {
+        auto source=generateTrace(10000,1); EventFilter filter; filter.range=source->bounds; filter.tracks={0,1};
+        EventAnalysisController controller; QSignalSpy ready(&controller,&EventAnalysisController::ready);
+        controller.request(source,filter); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),1,5000);
+        std::weak_ptr<const EventAnalysis> old=controller.result();
+        controller.cancel(true); QVERIFY(!old.expired()); QVERIFY(!controller.result());
+        filter.groupColumn=0; controller.request(source,filter); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),2,5000);
+        QVERIFY(controller.result()->reusedSelection); QTRY_VERIFY(old.expired());
+        old=controller.result(); controller.cancel(); QVERIFY(old.expired());
+        controller.request(source,filter); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),3,5000);
+        QVERIFY(!controller.result()->reusedSelection);
+    }
     /// 搜索同时遵守原始时长过滤、半开范围和重复轨道去重，同名字典项应合并。
     void eventSearchAggregationAndFrameSemantics() {
         const std::vector<Event> events{{1,0,100,0,0},{2,50,100,1,0},{3,150,20,0,1},{4,60,10,0,2}};

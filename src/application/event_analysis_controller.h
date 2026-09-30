@@ -15,8 +15,8 @@ public:
     ~EventAnalysisController() override;
     /// 冻结参数并替换待办，旧代次不可发布。
     void request(Snapshot source, EventFilter filter);
-    /// 丢弃待办并取消当前任务，不清理调用方拥有的快照。
-    void cancel();
+    /// 丢弃待办和可见结果；输入防抖可保留单项复用缓存，手动取消/销毁默认释放。
+    void cancel(bool preserveCache=false);
     /// 返回最近成功发布的只读结果。
     EventAnalysisPtr result() const { return result_; }
 signals:
@@ -46,5 +46,7 @@ private:
     std::uint64_t generation_=0;
     /// 最近成功发布的不可变结果。
     EventAnalysisPtr result_;
+    /// 最近成功发布的单项结果，仅Worker复用；不保存历史链，换筛选或显式取消失效。
+    EventAnalysisPtr cache_;
 };
 }

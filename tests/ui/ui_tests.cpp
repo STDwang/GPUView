@@ -37,6 +37,7 @@ private slots:
         panel.setContext(source,{0},std::nullopt); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),3,5000);
         panel.selectId(9); model->sort(4,Qt::DescendingOrder);
         QTRY_VERIFY_WITH_TIMEOUT(model->result() && model->result()->filter.eventColumn==4,5000);
+        QVERIFY(model->result()->reusedSelection);
         auto* table=panel.findChild<QTableView*>("eventResults"); QCOMPARE(model->eventAt(table->currentIndex().row())->id,std::uint64_t(9));
         panel.findChild<QLineEdit*>("eventSearch")->setText("task");
         QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),2,5000); QCOMPARE(groups->rowCount(),1);
