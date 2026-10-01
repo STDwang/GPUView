@@ -81,3 +81,17 @@
 验证：compactStatisticsPrioritizeMetricsAndClearEmptyValues使用实际字体和290×120区域，以QTextBrowser.cursorRect验证P99数值完整落在初始视口；检查空状态和Trace不显示FPS。真实905帧导入用例进一步过滤全部轨道，确认列表清空、定位禁用，再恢复轨道验证P99和定位恢复。Debug/Release共65个实际用例通过，帧分析截图已更新检查。
 
 取舍：富文本只描述固定数量指标，不为每个事件创建控件；与Qt Quick学习阶段可以对照排版方式。这里改善的是信息查找成本，没有声称计算提速；更大的系统字体和完整屏幕阅读器体验仍需另行验证。
+
+## 第七轮：有效导航历史和工具栏状态
+
+面试问题：为什么点击“上一视图”偶尔看起来什么都没发生？鼠标事件到了就该记一条历史吗？
+
+复现：全览时再向外缩放，或不移动地按一下中键，以前会先记住当前范围。随后返回的是同一个范围。工具栏也没有反映是否存在历史、是否已有有效选区。
+
+解决思路：[TimelineWidget](../../src/ui_widgets/timeline_widget.cpp)先通过TimeViewport夹紧请求范围，再比较实际结果；只有发生变化才保存旧范围，重复showRange与边界滚轮不追加历史。平移在首次实际位移记录一次，回到起点后释放或按Esc由finishPanGesture移除无效记录。历史继续限定64项，一次拖动不是每次mouseMove都记录。
+
+navigationChanged只描述真实导航能力，[MainWindow](../../src/ui_widgets/main_window.cpp)据此更新三个动作：无数据不能全览、无历史不能返回、选区已经等于视口时无需重复缩放。换快照直接建立初始视口，清理历史和拖动状态，不把旧会话视口短暂发布成可返回状态。
+
+验证：navigationActionsFollowEffectiveChanges覆盖初始禁用、重复全览/相同范围、中键点击、边界缩放、选区缩放及返回；panGestureHistoryAndSnapshotReset覆盖多次移动只返回一次、拖回原点后Esc、按住鼠标换数据后迟到释放。Debug/Release共67个实际用例通过。
+
+边界：历史仅保存时间视口，不是完整会话撤销栈，不恢复轨道过滤或统计条件。本轮没有以事件数量或测试数量宣称性能提高；边界滚轮只是不再发出无效viewportChanged。

@@ -36,6 +36,49 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 导航动作只反映实际可执行操作；全览边界、重复范围和中键点击不制造虚假返回历史。
+    void navigationActionsFollowEffectiveChanges() {
+        MainWindow window; window.show();
+        auto* overview=window.findChild<QAction*>("overviewAction");
+        auto* back=window.findChild<QAction*>("previousViewAction");
+        auto* zoom=window.findChild<QAction*>("zoomSelectionAction");
+        QVERIFY(!overview->isEnabled()); QVERIFY(!back->isEnabled()); QVERIFY(!zoom->isEnabled());
+        window.controller()->requestSynthetic(10000); QTRY_VERIFY_WITH_TIMEOUT(overview->isEnabled(),5000);
+        auto* timeline=window.timeline(); const auto full=timeline->visibleRange();
+        timeline->showRange(full); timeline->resetViewport(); timeline->resetViewport();
+        QTest::mouseClick(timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(400,70));
+        QWheelEvent outward(QPointF(400,70),QPointF(400,70),QPoint(),QPoint(0,-120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+        QApplication::sendEvent(timeline,&outward); QVERIFY(!back->isEnabled());
+        const TimeRange selected{full.end/4,full.end/2}; timeline->selectRange(selected);
+        QVERIFY(back->isEnabled()); QVERIFY(!zoom->isEnabled());
+        back->trigger(); QVERIFY(timeline->visibleRange()==full); QVERIFY(!back->isEnabled()); QVERIFY(zoom->isEnabled());
+        zoom->trigger(); timeline->zoomSelection(); back->trigger();
+        QVERIFY(timeline->visibleRange()==full); QVERIFY(!back->isEnabled());
+        QTest::keyClick(timeline,Qt::Key_Escape); QVERIFY(!zoom->isEnabled());
+    }
+    /// 多次移动的一次平移只占一条历史，拖回原点和换数据后的旧鼠标释放不污染导航。
+    void panGestureHistoryAndSnapshotReset() {
+        TimelineWidget timeline; timeline.resize(1000,360); timeline.show();
+        auto source=generateTrace(10000,1); timeline.setSnapshot(source);
+        const auto full=timeline.visibleRange(); timeline.showRange({full.end/4,full.end/2});
+        const auto before=timeline.visibleRange();
+        QTest::mousePress(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(500,70));
+        QTest::mouseMove(&timeline,QPoint(480,70)); QTest::mouseMove(&timeline,QPoint(460,70));
+        QTest::mouseRelease(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(460,70));
+        QVERIFY(!(timeline.visibleRange()==before)); timeline.previousView(); QVERIFY(timeline.visibleRange()==before);
+        QTest::mousePress(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(500,70));
+        QTest::mouseMove(&timeline,QPoint(480,70)); QTest::mouseMove(&timeline,QPoint(500,70));
+        QTest::keyClick(&timeline,Qt::Key_Escape);
+        QTest::mouseRelease(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(500,70));
+        timeline.previousView(); QVERIFY(timeline.visibleRange()==full);
+        QSignalSpy selected(&timeline,&TimelineWidget::rangeSelected);
+        QSignalSpy navigation(&timeline,&TimelineWidget::navigationChanged);
+        QTest::mousePress(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(400,70));
+        timeline.setSnapshot(generateTrace(10000,2));
+        QTest::mouseMove(&timeline,QPoint(600,70)); QTest::mouseRelease(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(600,70));
+        QCOMPARE(selected.count(),0);
+        for(const auto& state:navigation) QVERIFY(!state.at(1).toBool());
+    }
     /// 较矮统计区域无需滚动即可看到P99；空结果不能保留上次的有效值，Trace不能冒充FPS。
     void compactStatisticsPrioritizeMetricsAndClearEmptyValues() {
         Statistics stats; stats.count=905; stats.meanMs=8.192; stats.p95Ms=7.735; stats.p99Ms=82.945;

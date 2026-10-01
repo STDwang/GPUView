@@ -23,17 +23,31 @@ void TimelineWidget::setSnapshot(Snapshot snapshot) {
     snapshot_ = std::move(snapshot);
     firstTrack_ = 0;
     selection_.reset(); selectedEvent_.reset(); history_.clear();
+    selecting_=panning_=panHistorySaved_=false; hover_={-1,-1};
     tracks_.clear();
     if (snapshot_) for (std::uint32_t i = 0; i < snapshot_->tracks.size(); ++i) tracks_.push_back(i);
     cache_.clear();
     syncTrackScroll(0);
-    resetViewport(); history_.clear();
+    // 换会话直接建立初始视口，不经过“记住上一视图”的用户导航路径。
+    if(snapshot_) { viewport_.reset(snapshot_->bounds); emit viewportChanged(viewport_.range().begin,viewport_.range().end); }
+    emit selectionCleared(); publishNavigation(); update();
 }
 /// 保存时间视口，重复范围不追加；最多64项避免历史无界增长。
-void TimelineWidget::rememberView() {
-    if (!history_.empty() && history_.back() == viewport_.range()) return;
+void TimelineWidget::rememberView(TimeRange previous) {
+    if (!history_.empty() && history_.back() == previous) return;
     if (history_.size() == 64) history_.erase(history_.begin());
-    history_.push_back(viewport_.range());
+    history_.push_back(previous);
+}
+/// 用相同视口夹紧规则判断缩放是否有效，不让工具栏对无效操作保持可点击。
+void TimelineWidget::publishNavigation() {
+    auto target=viewport_;
+    if(selection_) target.show(*selection_);
+    emit navigationChanged(bool(snapshot_),!history_.empty(),snapshot_ && selection_ && !(target.range()==viewport_.range()));
+}
+/// 鼠标释放和Esc使用同一收尾，避免拖回起点后按Esc仍留下空返回步骤。
+void TimelineWidget::finishPanGesture() {
+    if(panning_ && panHistorySaved_ && !history_.empty() && history_.back()==viewport_.range()) history_.pop_back();
+    panning_=panHistorySaved_=false;
 }
 /// 替换可见轨道ID映射并使缓存失效；过滤后行号不等于源轨道ID。
 void TimelineWidget::setTracks(std::vector<std::uint32_t> tracks) {
@@ -41,19 +55,21 @@ void TimelineWidget::setTracks(std::vector<std::uint32_t> tracks) {
     if (snapshot_) for (auto id : tracks) if (id < snapshot_->tracks.size() && std::find(tracks_.begin(), tracks_.end(), id) == tracks_.end()) tracks_.push_back(id);
     cache_.clear();
     selectedEvent_.reset(); selection_.reset(); emit selectionCleared();
-    syncTrackScroll(0); update();
+    syncTrackScroll(0); publishNavigation(); update();
 }
 /// 保存旧视图后显示指定范围，发布viewportChanged同步曲线。
 void TimelineWidget::showRange(TimeRange range) {
     if (!snapshot_) return;
-    rememberView(); viewport_.show(range); emit viewportChanged(viewport_.range().begin, viewport_.range().end); update();
+    const auto previous=viewport_.range(); viewport_.show(range);
+    if(previous==viewport_.range()) return;
+    rememberView(previous); emit viewportChanged(viewport_.range().begin, viewport_.range().end); publishNavigation(); update();
 }
 /// 存在有效框选时缩放至选区，通过showRange保存返回视图。
 void TimelineWidget::zoomSelection() { if (selection_) showRange(*selection_); }
 /// 恢复最近保存的时间视口；没有历史时保持当前范围。
 void TimelineWidget::previousView() {
     if (history_.empty()) return;
-    viewport_.show(history_.back()); history_.pop_back(); emit viewportChanged(viewport_.range().begin, viewport_.range().end); update();
+    viewport_.show(history_.back()); history_.pop_back(); emit viewportChanged(viewport_.range().begin, viewport_.range().end); publishNavigation(); update();
 }
 /// 高亮事件、滚到对应轨道并发布详情；不改变时间缩放。
 void TimelineWidget::selectEvent(const Event& event) {
@@ -70,7 +86,7 @@ void TimelineWidget::selectEvent(const Event& event) {
 void TimelineWidget::selectRange(TimeRange range) {
     if(!snapshot_ || range.end<=range.begin) return;
     selectedEvent_.reset(); selection_=range;
-    showRange(range); emit rangeSelected(range.begin,range.end); update();
+    showRange(range); emit rangeSelected(range.begin,range.end); publishNavigation(); update();
 }
 /// 选中事件并缩放到其附近，供明细激活和最长事件导航。
 void TimelineWidget::focusEvent(const Event& event) {
@@ -89,10 +105,13 @@ int TimelineWidget::trackAt(int y) const {
 void TimelineWidget::leaveEvent(QEvent* event) { hover_ = {-1, -1}; update(); QWidget::leaveEvent(event); }
 /// 恢复全会话并清除选择，发布范围变化同步其他图表和统计。
 void TimelineWidget::resetViewport() {
-    rememberView();
-    if (snapshot_) { viewport_.reset(snapshot_->bounds); emit viewportChanged(viewport_.range().begin, viewport_.range().end); }
+    if (snapshot_) {
+        const auto previous=viewport_.range(); viewport_.reset(snapshot_->bounds);
+        if(!(previous==viewport_.range())) rememberView(previous);
+        emit viewportChanged(viewport_.range().begin, viewport_.range().end);
+    }
     selection_.reset(); selectedEvent_.reset(); emit selectionCleared();
-    update();
+    publishNavigation(); update();
 }
 /// 设置过滤后列表的首个可见行，内部夹紧滚动范围并重绘。
 void TimelineWidget::setFirstTrack(int track) {
@@ -205,11 +224,13 @@ void TimelineWidget::wheelEvent(QWheelEvent* event) {
     if (event->position().x() < gutter) {
         setFirstTrack(int(firstTrack_) - event->angleDelta().y() / 120 * 3); event->accept(); return;
     }
-    rememberView();
+    const auto previous=viewport_.range();
     const double anchor = (event->position().x() - gutter) / std::max(1, width() - gutter - 12);
     viewport_.zoom(std::pow(1.25, event->angleDelta().y() / 120.0), anchor);
+    if(previous==viewport_.range()) { event->accept(); return; }
+    rememberView(previous);
     emit viewportChanged(viewport_.range().begin, viewport_.range().end);
-    update();
+    publishNavigation(); update();
     event->accept();
 }
 /// 根据按键和命中开始选择/平移或发布事件；输入坐标为逻辑像素。
@@ -218,9 +239,9 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     setFocus();
     press_ = previous_ = event->position().toPoint();
     panning_ = event->button() == Qt::MiddleButton;
-    if (panning_) rememberView();
+    panHistorySaved_=false;
     selecting_ = event->button() == Qt::LeftButton;
-    if (selecting_) { selection_.reset(); selectedEvent_.reset(); emit selectionCleared(); }
+    if (selecting_) { selection_.reset(); selectedEvent_.reset(); emit selectionCleared(); publishNavigation(); }
 }
 /// 拖动时更新交互，空闲时更新悬停；不改写源事件。
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
@@ -239,9 +260,11 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         update();
     }
     if (panning_) {
+        const auto before=viewport_.range();
         viewport_.pan(double(previous_.x() - point.x()) / std::max(1, width() - gutter - 12));
+        if(!panHistorySaved_ && !(before==viewport_.range())) { rememberView(before); panHistorySaved_=true; }
         emit viewportChanged(viewport_.range().begin, viewport_.range().end);
-        previous_ = point;
+        previous_ = point; publishNavigation();
         update();
     } else if (selecting_) {
         const auto a = timeAt(press_.x()), b = timeAt(point.x());
@@ -259,8 +282,8 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         } else if (selection_ && selection_->end > selection_->begin)
             emit rangeSelected(selection_->begin, selection_->end);
     }
-    panning_ = selecting_ = false;
-    update();
+    finishPanGesture(); selecting_=false;
+    publishNavigation(); update();
 }
 /// 按点击时间和轨道查询原始事件，不把LOD聚合图元当作事件身份。
 void TimelineWidget::pick(const QPoint& point) {
@@ -287,7 +310,7 @@ void TimelineWidget::publishEvent(const Event& e) {
 /// 处理Home全览和Esc清除，其余按键交给QWidget。
 void TimelineWidget::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Home) resetViewport();
-    else if (event->key() == Qt::Key_Escape) { selection_.reset(); selectedEvent_.reset(); selecting_ = panning_ = false; emit selectionCleared(); update(); }
+    else if (event->key() == Qt::Key_Escape) { finishPanGesture(); selection_.reset(); selectedEvent_.reset(); selecting_=false; emit selectionCleared(); publishNavigation(); update(); }
     else QWidget::keyPressEvent(event);
 }
 }

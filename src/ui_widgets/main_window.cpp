@@ -46,11 +46,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* cancel = toolbar->addAction(QStringLiteral("取消加载"), &controller_, &SessionController::cancel); cancel->setEnabled(false);
     toolbar->addSeparator();
     // 复用时间轴统一全览入口，保持按钮与Home按键行为一致。
-    toolbar->addAction(QStringLiteral("全览 [Home]"), this, [this] { timeline_->resetViewport(); });
+    auto* overviewAction=toolbar->addAction(QStringLiteral("全览 [Home]"), this, [this] { timeline_->resetViewport(); });
     // 缩放已有选择，不另建一套范围计算逻辑。
-    toolbar->addAction(QStringLiteral("缩放到选区"), this, [this] { timeline_->zoomSelection(); });
+    auto* zoomAction=toolbar->addAction(QStringLiteral("缩放到选区"), this, [this] { timeline_->zoomSelection(); });
     // 调用有限视图历史，恢复上一次时间范围。
-    toolbar->addAction(QStringLiteral("上一视图"), this, [this] { timeline_->previousView(); });
+    auto* backAction=toolbar->addAction(QStringLiteral("上一视图"), this, [this] { timeline_->previousView(); });
+    overviewAction->setObjectName("overviewAction"); zoomAction->setObjectName("zoomSelectionAction"); backAction->setObjectName("previousViewAction");
+    overviewAction->setEnabled(false); zoomAction->setEnabled(false); backAction->setEnabled(false);
     auto* progress = new QProgressBar; progress->setObjectName("loadProgress"); progress->setMaximumWidth(100);
     progress->setRange(0,100); progress->setValue(0); auto* progressAction=toolbar->addWidget(progress); progressAction->setVisible(false);
     auto* central = new QWidget; auto* layout = new QVBoxLayout(central);
@@ -63,6 +65,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* plotsLayout = new QGridLayout; plotsLayout->addWidget(frameChart,0,0);
     auto* heatmap = new FrameHeatmap; heatmap->hide(); plotsLayout->addWidget(heatmap,1,0);
     timeline_ = new TimelineWidget;
+    // 按真实导航状态启用动作，加载/边界缩放/重复全览不会伪造一条返回历史。
+    connect(timeline_,&TimelineWidget::navigationChanged,this,[overviewAction,zoomAction,backAction](bool loaded,bool back,bool zoom) {
+        overviewAction->setEnabled(loaded); backAction->setEnabled(back); zoomAction->setEnabled(zoom);
+    });
     // 将热力图选择的纳秒范围交给时间轴，统一驱动选区和统计联动。
     connect(heatmap,&FrameHeatmap::rangePicked,this,[this](qint64 a,qint64 b) { timeline_->selectRange({a,b}); });
     // 只同步帧曲线视口，不重复解析数据。

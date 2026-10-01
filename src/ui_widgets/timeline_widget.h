@@ -56,6 +56,8 @@ signals:
     void selectionCleared();
     /// 发布首行、最大首行和页步长，使外部滚动条与可见轨道一致。
     void trackScrollChanged(int firstTrack, int maximum, int pageStep);
+    /// 实际导航状态，供工具栏同步可用性；不以鼠标是否按下推测历史是否存在。
+    void navigationChanged(bool hasData,bool canGoBack,bool canZoomSelection);
 protected:
     /// 清除悬停并调用基类，避免鼠标离开后残留高亮。
     void leaveEvent(QEvent*) override;
@@ -81,7 +83,11 @@ private:
     /// 把源事件与来源语义转为详情并发布，避免误把帧宽度当Kernel时长。
     void publishEvent(const Event& event);
     /// 保存时间视口，重复范围不追加；最多64项避免历史无界增长。
-    void rememberView();
+    void rememberView(TimeRange previous);
+    /// 在交互完成状态变更后发布导航能力，选区已等于视口时禁用重复缩放。
+    void publishNavigation();
+    /// 结束平移手势，若回到起点则撤掉本手势产生的无效历史；不撤销有效位移。
+    void finishPanGesture();
     /// 把纵坐标映射为源轨道ID；超出绘图区或显示映射返回-1。
     int trackAt(int y) const;
     /// 以gutter为原点把横坐标映射为视口内纳秒时刻。
@@ -118,6 +124,8 @@ private:
     QPoint previous_;
     /// 是否正用中键拖动平移时间轴。
     bool panning_ = false;
+    /// 一次中键拖动只在首次实际位移时保存历史，点击或边界无效拖动不产生记录。
+    bool panHistorySaved_ = false;
     /// 是否正用左键拖动选择时间范围。
     bool selecting_ = false;
     /// 用户框选的半开纳秒范围，与单事件选择分开保存。
