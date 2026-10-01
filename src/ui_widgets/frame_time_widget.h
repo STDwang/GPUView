@@ -9,7 +9,9 @@ class FrameTimeWidget : public QWidget {
     Q_OBJECT
 public:
     /// 设置帧曲线高度；只消费已发布快照，不直接解析CSV。
-    explicit FrameTimeWidget(QWidget* parent = nullptr) : QWidget(parent) { setMinimumHeight(150); setMaximumHeight(210); }
+    explicit FrameTimeWidget(QWidget* parent = nullptr) : QWidget(parent) { setMinimumHeight(110); setMaximumHeight(210); }
+    /// 常规窗口优先150逻辑像素，紧凑窗口允许压缩，仍保留尖峰和预算线。
+    QSize sizeHint() const override { return {480,150}; }
     /// 绑定当前源轨道的只读快照并恢复全范围；track由上层有效分组提供。
     void setData(Snapshot snapshot, std::uint32_t track) { snapshot_=std::move(snapshot); track_=track; if(snapshot_) range_=snapshot_->bounds; update(); }
     /// 同步可见纳秒范围并请求重绘，不在此重新计算精确统计。

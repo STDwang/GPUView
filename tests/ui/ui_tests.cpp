@@ -15,6 +15,8 @@
 #include "ui_widgets/frame_details_panel.h"
 #include "ui_widgets/frame_heatmap.h"
 #include "ui_widgets/event_explorer.h"
+#include "ui_widgets/theme.h"
+#include "ui_widgets/time_axis.h"
 #include <QPushButton>
 #include <QDoubleSpinBox>
 #include <QTableView>
@@ -23,11 +25,47 @@
 #include <QCheckBox>
 #include <QProgressBar>
 #include <QLabel>
+#include <QHeaderView>
 using namespace gpuview;
 /// Qt Test界面回归集合；在离屏环境模拟输入并断言可观察状态。
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
+    void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 不同范围、宽度、字体下标签均不越界/重叠；减少刻度不能改变首末时间位置。
+    void timeAxisLabelsFitAvailableWidth() {
+        for(int pointSize:{10,16}) {
+            QFont font=qApp->font(); font.setPointSize(pointSize); const QFontMetrics metrics(font);
+            for(int width:{40,160,318,400,1000}) for(TimeRange range:{TimeRange{0,7457961000LL},TimeRange{10000000,10000100},TimeRange{0,120000000000LL}}) {
+                const auto ticks=timeAxisTicks(range,width,metrics); QVERIFY(!ticks.empty()); QVERIFY(ticks.size()<=9);
+                QCOMPARE(ticks.front().x,0); int previousRight=-10;
+                for(const auto& tick:ticks) {
+                    QVERIFY(tick.labelLeft>=previousRight+10);
+                    const int right=tick.labelLeft+metrics.horizontalAdvance(tick.text); QVERIFY(right<=width);
+                    previousRight=right;
+                }
+                if(ticks.size()>1) QCOMPARE(ticks.back().x,width);
+            }
+        }
+        QVERIFY(timeAxisTicks({1,1},400,QFontMetrics(qApp->font())).empty());
+        QVERIFY(timeAxisTicks({0,1},0,QFontMetrics(qApp->font())).empty());
+    }
+    /// 真实帧模式应适配1200x800逻辑像素；可选环境路径保存高DPI截图用于目视复核。
+    void frameWorkspaceFitsCompactWindow() {
+        MainWindow window; window.resize(1200,800); window.show();
+        window.controller()->requestFile(QFINDTESTDATA("../../data/samples/presentmon-real.csv"));
+        auto* model=window.findChild<EventAnalysisModel*>("eventResultsModel");
+        QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
+        QTRY_COMPARE_WITH_TIMEOUT(window.findChild<FrameTableModel*>()->rowCount(),905,5000);
+        QCOMPARE(window.size(),QSize(1200,800));
+        auto* table=window.findChild<QTableView*>("eventResults");
+        QVERIFY(table->viewport()->height()>=2*table->verticalHeader()->defaultSectionSize());
+        QVERIFY(window.timeline()->height()>=120);
+        QCOMPARE(window.findChild<FrameTimeWidget*>()->width(),window.timeline()->width());
+        const auto capture=qEnvironmentVariable("GPUVIEW_TEST_CAPTURE");
+        if(!capture.isEmpty()) QVERIFY(window.grab().save(capture));
+    }
     /// 非法上下限不发布旧结果，回车纠正立即提交；快捷导航沿当前排序前后切换。
     void searchValidationAndKeyboardNavigation() {
         EventExplorer panel; panel.resize(1100,320); panel.show();

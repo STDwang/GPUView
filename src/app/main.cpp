@@ -6,25 +6,13 @@
 #include "ui_widgets/theme.h"
 #include <QApplication>
 #include <QTimer>
-#include <QFile>
-#include <QTextStream>
-#include <QFontDatabase>
-#include <QDir>
 #include <QTabWidget>
 /// 应用进程入口；建立Qt事件循环，处理教学/CSV启动和离屏截图参数。
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     app.setApplicationName("GPUView");
     app.setApplicationVersion("0.4.0");
-    // Fusion以Qt调色板绘制标准控件，使深色箭头/复选框跨系统主题保持可见。
-    app.setStyle(QStringLiteral("Fusion")); app.setPalette(gpuview::darkPalette());
-    // Windows离屏平台不一定自动枚举系统字体；只读取本机字体，不打包分发字体文件。
-#ifdef Q_OS_WIN
-    const auto fontPath = QDir(qEnvironmentVariable("SystemRoot", "C:/Windows")).filePath("Fonts/msyh.ttc");
-    const int fontId = QFontDatabase::addApplicationFont(fontPath);
-    const auto families = QFontDatabase::applicationFontFamilies(fontId);
-    if (!families.isEmpty()) app.setFont(QFont(families.front(), 10));
-#endif
+    gpuview::configureApplicationTheme(app);
     gpuview::MainWindow window;
     const auto args = app.arguments();
     const int openFile = args.indexOf("--open");

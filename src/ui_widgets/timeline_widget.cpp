@@ -1,6 +1,7 @@
 /// @file src/ui_widgets/timeline_widget.cpp
 /// @brief 自绘多轨时间轴、缩放/平移/选择、轨道滚动及诊断；不可变源数据与交互状态分离。
 #include "ui_widgets/timeline_widget.h"
+#include "ui_widgets/time_axis.h"
 #include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -12,7 +13,8 @@
 namespace gpuview {
 /// 初始化自绘时间轴的输入/焦点策略，源数据由不可变快照拥有。
 TimelineWidget::TimelineWidget(QWidget* parent) : QWidget(parent) {
-    setMinimumSize(480, 240);
+    // 小窗口至少保留刻度和两条完整轨道；更多轨道通过已有滚动条访问。
+    setMinimumSize(480, 120);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 }
@@ -139,19 +141,11 @@ void TimelineWidget::paintEvent(QPaintEvent*) {
     const auto& batch = cache_.get(snapshot_, {snapshot_->version, view, plotWidth, firstTrack_, tracks_.empty() ? 0u : visibleTracks, tracks_});
     lastPrimitives_ = batch.primitives.size();
     painter.setPen(QColor("#354252"));
-    for (int tick = 0; tick <= 8; ++tick) {
-        const int x = gutter + plotWidth * tick / 8;
+    for (const auto& tick : timeAxisTicks(view,plotWidth,painter.fontMetrics())) {
+        const int x = gutter + tick.x;
         painter.drawLine(x, top - 5, x, height());
         painter.setPen(QColor("#a9bac8"));
-        const auto spanNs = view.end - view.begin;
-        const auto time = view.begin + (spanNs / 8) * tick + (spanNs % 8) * tick / 8;
-        const auto span = view.end - view.begin;
-        const double unit = span >= 10000000000LL ? 1e9 : span >= 1000000 ? 1e6 : 1e3;
-        const QString suffix = unit == 1e9 ? " s" : unit == 1e6 ? " ms" : QStringLiteral(" μs");
-        const int precision = std::clamp(int(std::ceil(-std::log10(double(span) / unit / 8))), 0, 6);
-        const auto label = QString::number(double(time) / unit, 'f', precision) + suffix;
-        const auto labelWidth = painter.fontMetrics().horizontalAdvance(label);
-        painter.drawText(std::clamp(x - labelWidth / 2, gutter, width() - labelWidth - 4), 23, label);
+        painter.drawText(gutter+tick.labelLeft,23,tick.text);
         painter.setPen(QColor("#273442"));
     }
     for (std::uint32_t index = firstTrack_; index < std::min(std::uint32_t(tracks_.size()), firstTrack_ + visibleTracks); ++index) {

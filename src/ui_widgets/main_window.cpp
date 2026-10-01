@@ -82,7 +82,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     tabs->addTab(detail,QStringLiteral("事件"));
     auto* analysisPage = new QWidget; auto* analysisLayout = new QVBoxLayout(analysisPage);
     auto* group = new QComboBox; group->setObjectName("statisticsGroup"); analysisLayout->addWidget(group);
-    auto* summary = new QTextBrowser; summary->setObjectName("statisticsSummary"); summary->setMinimumHeight(160); analysisLayout->addWidget(summary,1);
+    auto* summary = new QTextBrowser; summary->setObjectName("statisticsSummary"); summary->setMinimumHeight(120); analysisLayout->addWidget(summary,1);
     auto* longest = new QPushButton(QStringLiteral("定位最长事件 / 帧")); longest->setEnabled(false); analysisLayout->addWidget(longest);
     auto* longTable = new QTableWidget(0,2); longTable->setObjectName("longFrames"); longTable->setHorizontalHeaderLabels({QStringLiteral("长帧时刻 ms"),QStringLiteral("帧间隔 ms")});
     longTable->setEditTriggers(QAbstractItemView::NoEditTriggers); longTable->setSelectionBehavior(QAbstractItemView::SelectRows);

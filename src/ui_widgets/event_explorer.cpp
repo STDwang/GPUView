@@ -75,6 +75,7 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
     setObjectName("eventExplorer");
     setToolTip(QStringLiteral("筛选只作用于本面板；现有帧分析导出仍使用统计页的组和选区，不包含这里的名称/时长筛选。"));
     auto* layout=new QVBoxLayout(this); auto* searchRow=new QHBoxLayout; auto* controls=new QHBoxLayout;
+    layout->setContentsMargins(6,6,6,6); layout->setSpacing(4);
     text_=new QLineEdit; text_->setObjectName("eventSearch");
     text_->setPlaceholderText(QStringLiteral("搜索事件名称 · 区分大小写 · Ctrl+F")); text_->setClearButtonEnabled(true);
     text_->setAccessibleName(QStringLiteral("搜索事件名称")); searchRow->addWidget(text_,1);
@@ -106,6 +107,8 @@ EventExplorer::EventExplorer(QWidget* parent):QWidget(parent) {
         table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->setAlternatingRowColors(true);
         table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
         table->verticalHeader()->setDefaultSectionSize(30); table->setShowGrid(false);
+        // 允许面板缩到表头加两行，完整结果仍由滚动条访问，不依赖默认平台最小尺寸。
+        table->setMinimumHeight(96);
         table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         table->setSortingEnabled(true);
     }

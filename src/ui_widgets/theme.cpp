@@ -1,7 +1,19 @@
 /// @file theme.cpp
 /// @brief 深色工作台样式，显式区分焦点、选择、禁用、悬停和滚动滑块。
 #include "ui_widgets/theme.h"
+#include <QApplication>
+#include <QFontDatabase>
+#include <QDir>
 namespace gpuview {
+/// 离屏平台未必枚举系统字体，测试必须使用与应用相同的字体和样式才能验证尺寸。
+void configureApplicationTheme(QApplication& app) {
+    app.setStyle(QStringLiteral("Fusion")); app.setPalette(darkPalette());
+#ifdef Q_OS_WIN
+    const auto fontPath=QDir(qEnvironmentVariable("SystemRoot","C:/Windows")).filePath("Fonts/msyh.ttc");
+    const auto families=QFontDatabase::applicationFontFamilies(QFontDatabase::addApplicationFont(fontPath));
+    if(!families.isEmpty()) app.setFont(QFont(families.front(),10));
+#endif
+}
 /// 显式设置文字/按钮/占位/禁用角色，避免系统浅色调色板在深色背景画黑色箭头。
 QPalette darkPalette() {
     QPalette palette;
