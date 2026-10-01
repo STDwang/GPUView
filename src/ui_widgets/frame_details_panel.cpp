@@ -9,12 +9,16 @@
 #include <QMenu>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
+#include <algorithm>
 namespace gpuview {
 /// 创建表格模型及导出控件并连接信号；子对象归面板所有，不为每帧创建控件。
 FrameDetailsPanel::FrameDetailsPanel(QWidget* parent) : QWidget(parent) {
-    auto* layout=new QVBoxLayout(this); auto* actions=new QHBoxLayout;
-    label_=new QLabel(QStringLiteral("暂无帧明细")); actions->addWidget(label_,1);
-    notes_=new QLineEdit; notes_->setPlaceholderText(QStringLiteral("导出备注（仅保存到本地报告）")); notes_->setMaxLength(2000); actions->addWidget(notes_,1);
+    auto* layout=new QVBoxLayout(this); layout->setContentsMargins(6,6,6,6); layout->setSpacing(4); auto* actions=new QHBoxLayout;
+    label_=new QLabel(QStringLiteral("暂无帧明细")); label_->setObjectName("frameDetailsStatus");
+    label_->setToolTip(QStringLiteral("完整帧明细：单击联动，双击/Enter定位；点击表头后台排序。")); actions->addWidget(label_);
+    notes_=new QLineEdit; notes_->setObjectName("exportNotes"); notes_->setAccessibleName(QStringLiteral("导出备注"));
+    notes_->setPlaceholderText(QStringLiteral("导出备注（可选）")); notes_->setToolTip(QStringLiteral("仅写入本地导出报告，最多2000个字符。"));
+    notes_->setClearButtonEnabled(true); notes_->setMaxLength(2000); actions->addWidget(notes_,1);
     exportButton_=new QPushButton(QStringLiteral("导出分析")); exportButton_->setObjectName("exportAnalysis"); exportButton_->setEnabled(false);
     auto* menu=new QMenu(exportButton_);
     for(const auto& option: {std::make_pair(QStringLiteral("CSV 摘要"),ExportFormat::SummaryCsv),
@@ -23,12 +27,15 @@ FrameDetailsPanel::FrameDetailsPanel(QWidget* parent) : QWidget(parent) {
         menu->addAction(option.first,this,[this,format=option.second] { emit exportRequested(format,notes_->text()); });
     }
     exportButton_->setMenu(menu); actions->addWidget(exportButton_);
-    cancelButton_=new QPushButton(QStringLiteral("取消导出")); cancelButton_->setEnabled(false); actions->addWidget(cancelButton_);
+    cancelButton_=new QPushButton(QStringLiteral("取消导出")); cancelButton_->setObjectName("cancelFrameExport");
+    cancelButton_->setEnabled(false); cancelButton_->hide(); actions->addWidget(cancelButton_);
     connect(cancelButton_,&QPushButton::clicked,this,&FrameDetailsPanel::cancelExport); layout->addLayout(actions);
     model_=new FrameTableModel(this); table_=new QTableView; table_->setObjectName("frameDetailsTable"); table_->setModel(model_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows); table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    table_->setEditTriggers(QAbstractItemView::NoEditTriggers); table_->setAlternatingRowColors(true);
-    table_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed); table_->verticalHeader()->setDefaultSectionSize(24);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers); table_->setAlternatingRowColors(true); table_->setShowGrid(false);
+    table_->setToolTip(label_->toolTip());
+    table_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    table_->verticalHeader()->setDefaultSectionSize(std::max(30,table_->fontMetrics().height()+6));
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); table_->setSortingEnabled(true);
     table_->horizontalHeader()->setSortIndicator(1,Qt::AscendingOrder); table_->setMinimumHeight(130); layout->addWidget(table_,1);
     connect(model_,&FrameTableModel::sortRequested,this,&FrameDetailsPanel::sortRequested);
@@ -43,7 +50,8 @@ FrameDetailsPanel::FrameDetailsPanel(QWidget* parent) : QWidget(parent) {
 void FrameDetailsPanel::setAnalysis(FrameAnalysisPtr analysis) {
     const QSignalBlocker blocker(table_->selectionModel()); model_->setAnalysis(std::move(analysis));
     const auto analysisSnapshot=model_->analysis();
-    label_->setText(analysisSnapshot ? QStringLiteral("完整帧明细：%1 条 · 单击联动，双击/Enter定位 · 点击表头后台排序").arg(analysisSnapshot->rows.size()) : QStringLiteral("等待当前选区分析…"));
+    // 数量常驻；不让重复的操作说明挤掉可编辑备注和导出按钮。
+    label_->setText(analysisSnapshot ? QStringLiteral("帧明细 · %1 条").arg(analysisSnapshot->rows.size()) : QStringLiteral("等待当前分析…"));
     if(selectedId_) selectId(*selectedId_);
     exportButton_->setEnabled(bool(analysisSnapshot) && !exporting_);
 }
@@ -61,6 +69,6 @@ void FrameDetailsPanel::setExportProgress(int percent) { cancelButton_->setText(
 /// 更新导出按钮状态；后台写入期间可继续阅读，但禁止重复发起导出。
 void FrameDetailsPanel::setExportBusy(bool busy) {
     cancelButton_->setText(QStringLiteral("取消导出"));
-    exporting_=busy; cancelButton_->setEnabled(busy); exportButton_->setEnabled(!busy && bool(model_->analysis()));
+    exporting_=busy; cancelButton_->setVisible(busy); cancelButton_->setEnabled(busy); exportButton_->setEnabled(!busy && bool(model_->analysis()));
 }
 }

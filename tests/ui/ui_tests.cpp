@@ -36,6 +36,29 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 帧明细在较窄面板和导出忙状态仍容纳操作，行高要留出实际字体及上下内边距。
+    void frameDetailsRemainReadableAtCompactWidth() {
+        FrameDetailsPanel panel; panel.setStyleSheet(darkTheme()); panel.resize(760,300); panel.show();
+        const auto source=buildStore({{1,0,1000000,0,0},{2,2000000,2000000,0,0}},{"frames"},{"Present"},1,{}, {},false,true);
+        panel.setAnalysis(analyzeFrames(source,source->bounds,{0})); QCoreApplication::processEvents();
+        QCOMPARE(panel.width(),760);
+        auto* notes=panel.findChild<QLineEdit*>("exportNotes"); QVERIFY(notes); QVERIFY(notes->width()>=240);
+        notes->setText(QStringLiteral("检查帧间隔尖峰"));
+        auto* cancel=panel.findChild<QPushButton*>("cancelFrameExport"); QVERIFY(cancel); QVERIFY(cancel->isHidden());
+        auto* table=panel.findChild<QTableView*>("frameDetailsTable");
+        QVERIFY(table->verticalHeader()->defaultSectionSize()>=table->fontMetrics().height()+6);
+        auto* exportButton=panel.findChild<QPushButton*>("exportAnalysis"); QVERIFY(exportButton->isEnabled());
+        panel.setExportBusy(true); panel.setExportProgress(100); QCoreApplication::processEvents();
+        QCOMPARE(panel.width(),760); QVERIFY(!exportButton->isEnabled()); QVERIFY(cancel->isVisible()); QVERIFY(cancel->isEnabled());
+        QVERIFY(notes->width()>=240); QVERIFY(notes->geometry().right()<exportButton->geometry().left());
+        QSignalSpy cancelled(&panel,&FrameDetailsPanel::cancelExport); QTest::mouseClick(cancel,Qt::LeftButton); QCOMPARE(cancelled.count(),1);
+        panel.setAnalysis({}); panel.setExportBusy(false); QVERIFY(!exportButton->isEnabled()); QVERIFY(cancel->isHidden());
+        panel.setAnalysis(analyzeFrames(source,source->bounds,{0})); QVERIFY(exportButton->isEnabled());
+        QCOMPARE(notes->text(),QStringLiteral("检查帧间隔尖峰"));
+        QCoreApplication::processEvents();
+        const auto capture=qEnvironmentVariable("GPUVIEW_FRAME_PANEL_CAPTURE");
+        if(!capture.isEmpty()) QVERIFY(panel.grab().save(capture));
+    }
     /// 帧图仅接受绘图区左击，最近帧必须属于半开可见范围；热力图留白不映射末桶。
     void chartPickingRespectsPlotAndVisibleSamples() {
         auto source=buildStore({{1,10,5,0,0},{2,50,5,0,0},{3,90,5,0,0}},{"frame"},{"Present"},1,{}, {},false,true);
