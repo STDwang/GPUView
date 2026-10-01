@@ -5,6 +5,21 @@
 #include <limits>
 #include <cmath>
 namespace gpuview {
+namespace {
+/// 旧结果可能仍被表格/导出读取；分块复制到新对象，并在大数组复制期间响应取消。
+template<class T> void copyFrameVector(std::vector<T>& target,const std::vector<T>& source,const CancelFlag& cancel) {
+    target.reserve(source.size());
+    for(std::size_t first=0;first<source.size();first+=1024) {
+        checkCancelled(cancel);
+        target.insert(target.end(),source.begin()+first,source.begin()+std::min(source.size(),first+1024));
+    }
+}
+}
+/// 用指针身份区分同版本的独立会话，避免复用指向另一份源数组的行引用。
+bool canReuseFrameSelection(const FrameAnalysisPtr& previous,const Snapshot& source,TimeRange range,
+    const std::vector<std::uint32_t>& tracks) {
+    return previous && previous->source==source && previous->range==range && previous->tracks==tracks;
+}
 /// 按排序行索引借用源事件；越界抛异常，引用有效期依赖源快照。
 const Event& FrameAnalysis::event(std::size_t row) const {
     const auto& ref = rows.at(row); return source->tracks.at(ref.track).index.events().at(ref.index);
@@ -18,30 +33,39 @@ int FrameAnalysis::rowForId(std::uint64_t id) const {
 }
 /// 后台生成单帧组的范围统计、排序行索引、ID映射和全会话热力概览；支持取消，结果只读。
 FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std::uint32_t> tracks,
-    FrameSort sort, bool descending, const CancelFlag& cancel) {
+    FrameSort sort, bool descending, const CancelFlag& cancel,const FrameAnalysisPtr& previous) {
+    checkCancelled(cancel);
     if (!source || !source->frames || tracks.size() > 1) throw std::invalid_argument("single frame group required");
     if (!tracks.empty() && tracks.front() >= source->tracks.size()) throw std::invalid_argument("invalid frame group");
     auto out = std::make_shared<FrameAnalysis>(); out->source = std::move(source); out->range = range;
     out->tracks = std::move(tracks); out->sort = sort; out->descending = descending;
-    out->summary = calculateStatistics(*out->source, range, out->tracks, cancel, &out->rows);
-    if (out->rows.size() > std::size_t(std::numeric_limits<int>::max())) throw std::runtime_error("table row limit exceeded");
-    if (!out->tracks.empty()) {
-        const auto& events = out->source->tracks[out->tracks.front()].index.events();
-        for (std::size_t i=0; i<events.size(); ++i) {
-            if (i%1024==0) checkCancelled(cancel);
-            const auto& e=events[i]; const auto begin=e.start/1000000000*1000000000;
-            if(out->heat.empty() || out->heat.back().begin!=begin) out->heat.push_back({begin,0,0});
-            auto& bin=out->heat.back(); ++bin.count; bin.maximum=std::max(bin.maximum,e.duration);
+    out->reusedSelection=canReuseFrameSelection(previous,out->source,range,out->tracks);
+    if(out->reusedSelection) {
+        out->summary=previous->summary; // 最长项列表最多200条，摘要复制有界。
+        copyFrameVector(out->rows,previous->rows,cancel);
+        copyFrameVector(out->heat,previous->heat,cancel);
+        copyFrameVector(out->heatOverview,previous->heatOverview,cancel);
+    } else {
+        out->summary = calculateStatistics(*out->source, range, out->tracks, cancel, &out->rows);
+        if (out->rows.size() > std::size_t(std::numeric_limits<int>::max())) throw std::runtime_error("table row limit exceeded");
+        if (!out->tracks.empty()) {
+            const auto& events = out->source->tracks[out->tracks.front()].index.events();
+            for (std::size_t i=0; i<events.size(); ++i) {
+                if (i%1024==0) checkCancelled(cancel);
+                const auto& e=events[i]; const auto begin=e.start/1000000000*1000000000;
+                if(out->heat.empty() || out->heat.back().begin!=begin) out->heat.push_back({begin,0,0});
+                auto& bin=out->heat.back(); ++bin.count; bin.maximum=std::max(bin.maximum,e.duration);
+            }
         }
-    }
-    constexpr int columns=4096; out->heatOverview.resize(columns,0);
-    const auto bounds=out->source->bounds; const double scale=double(columns)/(bounds.end-bounds.begin);
-    for(std::size_t i=0;i<out->heat.size();++i) {
-        if(i%1024==0) checkCancelled(cancel);
-        const auto& bin=out->heat[i]; const auto end=bin.begin+std::min<TimeNs>(1000000000,bounds.end-bin.begin);
-        const int first=std::clamp(int((bin.begin-bounds.begin)*scale),0,columns-1);
-        const int last=std::clamp(int(std::ceil((end-bounds.begin)*scale))-1,first,columns-1);
-        for(int x=first;x<=last;++x) out->heatOverview[std::size_t(x)]=std::max(out->heatOverview[std::size_t(x)],bin.maximum);
+        constexpr int columns=4096; out->heatOverview.resize(columns,0);
+        const auto bounds=out->source->bounds; const double scale=double(columns)/(bounds.end-bounds.begin);
+        for(std::size_t i=0;i<out->heat.size();++i) {
+            if(i%1024==0) checkCancelled(cancel);
+            const auto& bin=out->heat[i]; const auto end=bin.begin+std::min<TimeNs>(1000000000,bounds.end-bin.begin);
+            const int first=std::clamp(int((bin.begin-bounds.begin)*scale),0,columns-1);
+            const int last=std::clamp(int(std::ceil((end-bounds.begin)*scale))-1,first,columns-1);
+            for(int x=first;x<=last;++x) out->heatOverview[std::size_t(x)]=std::max(out->heatOverview[std::size_t(x)],bin.maximum);
+        }
     }
     // 把行引用转换为排序键，不移动或改写快照中的原始事件。
     auto key = [&](const FrameRow& row) -> std::uint64_t {

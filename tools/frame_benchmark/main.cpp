@@ -18,9 +18,43 @@
 #include <psapi.h>
 #endif
 using namespace gpuview;
+/// 同进程交替测量冷算/复用排序；构造数据、旧结果和逐行一致性检查均在计时之外。
+int benchmarkFrameSort(const QString& path) {
+    QFile output(path); if(!output.open(QIODevice::WriteOnly)) return 2; QTextStream stream(&output);
+    stream<<"events,sort,run,mode,analysis_ms,rows\n";
+    for(int count:{100000,1000000}) {
+        std::vector<Event> events; events.reserve(std::size_t(count));
+        for(int i=0;i<count;++i) events.push_back({std::uint64_t(i+1),TimeNs(i)*16666667,i%60==59?70000000:16666667,0,0});
+        const auto source=buildStore(std::move(events),{"synthetic frame sort"},{"synthetic"},1,{}, {},true,true);
+        const auto previous=analyzeFrames(source,source->bounds,{0});
+        for(auto sort:{FrameSort::Duration,FrameSort::LongFrame}) for(int run=-1;run<5;++run) {
+            FrameAnalysisPtr results[2]; double elapsed[2]{};
+            for(int step=0;step<2;++step) {
+                const int mode=(step+(run+1)%2)%2; QElapsedTimer timer; timer.start();
+                results[mode]=analyzeFrames(source,source->bounds,{0},sort,true,{},mode?previous:FrameAnalysisPtr{});
+                elapsed[mode]=timer.nsecsElapsed()/1e6;
+            }
+            // 不能以更少的行或近似统计换取提速；测试也覆盖全部摘要字段与缓存失效条件。
+            if(results[0]->rows.size()!=std::size_t(count) || results[0]->rows.size()!=results[1]->rows.size() ||
+                results[0]->idRows!=results[1]->idRows || results[0]->heatOverview!=results[1]->heatOverview ||
+                results[0]->summary.p99Ms!=results[1]->summary.p99Ms || !results[1]->reusedSelection) return 3;
+            for(std::size_t i=0;i<results[0]->rows.size();++i)
+                if(results[0]->event(i).id!=results[1]->event(i).id || results[0]->rows[i].longFrame!=results[1]->rows[i].longFrame) return 3;
+            if(run>=0) for(int mode=0;mode<2;++mode)
+                stream<<count<<','<<(sort==FrameSort::Duration?"duration":"long_frame")<<','<<run<<','<<(mode?"reuse":"cold")<<','<<elapsed[mode]<<','<<count<<'\n';
+            stream.flush();
+        }
+    }
+    return 0;
+}
 /// 帧分析/完整表格基准及公开样本报告验证；百万数据是合成帧，内存是进程累计峰值。
 int main(int argc,char** argv) {
-    QApplication app(argc,argv); const auto args=app.arguments(); if(args.size()<4) return 1;
+    QApplication app(argc,argv); const auto args=app.arguments();
+    if(args.size()==3 && args[1]=="--sort") {
+        try { return benchmarkFrameSort(args[2]); }
+        catch(const std::exception& error) { QTextStream(stderr)<<error.what()<<'\n'; return 4; }
+    }
+    if(args.size()<4) return 1;
 #ifdef _WIN32
     const auto id=QFontDatabase::addApplicationFont(QDir(qEnvironmentVariable("SystemRoot","C:/Windows")).filePath("Fonts/msyh.ttc"));
     const auto families=QFontDatabase::applicationFontFamilies(id); if(!families.isEmpty()) app.setFont(QFont(families.front(),10));

@@ -25,11 +25,13 @@ void StatisticsController::start(Request request) {
     auto details = std::make_shared<FrameAnalysisPtr>();
     auto error = std::make_shared<QString>();
     const auto cancel = cancel_;
+    // 只持有最近发布且完整匹配的结果；新范围/会话不把无关旧数据交给Worker。
+    const auto previous=canReuseFrameSelection(frameDetails_,request.snapshot,request.range,request.tracks) ? frameDetails_ : FrameAnalysisPtr{};
     // 冻结请求按值交给Worker；结果先写独立容器，GUI尚不可见，取消也不发布半成品。
-    worker_ = QThread::create([request, cancel, value, error, details] {
+    worker_ = QThread::create([request, cancel, value, error, details, previous] {
         try {
             if(request.snapshot->frames) {
-                *details=analyzeFrames(request.snapshot,request.range,request.tracks,request.sort,request.descending,cancel);
+                *details=analyzeFrames(request.snapshot,request.range,request.tracks,request.sort,request.descending,cancel,previous);
                 *value=(*details)->summary;
             } else *value = calculateStatistics(*request.snapshot, request.range, request.tracks, cancel);
         }

@@ -36,6 +36,7 @@
 - 后台精确统计：数量、总时长、均值、P50/P95/P99、时长分布、最长项定位。Trace按相交时长裁剪；帧按Present时刻归属。
 - PresentMon v1 CSV：引号/BOM/数值校验、无效记录报告、进程/交换链分组；帧间隔曲线、60FPS预算长帧规则、前200条长帧列表（计数不截断）。
 - 完整帧明细Model/View、后台排序、稳定ID双向联动；1秒max热力图，点击联动选区。
+- 帧表排序复用相同快照/范围/轨道的统计与热力数据，后台复制后独立排序，不改动界面或导出持有的旧结果；[合成帧排序对照](benchmarks/reports/FRAME_SORT.md)记录测量与内存取舍。
 - 帧图只响应绘图区左击，拾取限于当前半开视口内的原始帧；空时间段保持无选择，热力图留白/标题不触发选区，离开色带隐藏提示。
 - 帧明细采用简洁数量状态和更宽的备注输入，空闲时隐藏取消导出；表格行高保留文字内边距。[面板截图（两条合成测试帧）](assets/screenshots/frame-details.png)。
 - CSV统计、Markdown报告及完整帧CSV导出：输入SHA-256、范围/口径/警告/备注；冻结快照、取消和原子保存。
@@ -138,4 +139,4 @@ core不依赖Qt；UI不解析文件，不管理worker内部数据。不为每个
 
 帧明细新增证据：[百万帧测量](benchmarks/reports/FRAME_ANALYSIS.md) · [问题、代码与练习](docs/07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。Debug/Release均通过52个实际用例（Core 42 + UI 10，不含初始化和清理）。
 
-2026-10-01：Debug/Release均通过69个实际用例（Core 47 + UI 22）。[同机排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms；事件时长排序本轮未改善。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。
+2026-10-01：Debug/Release均通过71个实际用例（Core 49 + UI 22）。[事件排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms，事件时长排序未改善；[帧排序对照](benchmarks/reports/FRAME_SORT.md)：百万合成帧的间隔排序中位数847.86→145.81ms。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。

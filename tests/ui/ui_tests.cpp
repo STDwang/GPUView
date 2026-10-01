@@ -286,11 +286,13 @@ private slots:
         auto* model=window.findChild<FrameTableModel*>(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
         auto* table=window.findChild<QTableView*>("frameDetailsTable"); table->sortByColumn(2,Qt::DescendingOrder);
         QTRY_VERIFY_WITH_TIMEOUT(model->analysis() && model->analysis()->sort==FrameSort::Duration,5000);
+        QVERIFY(model->analysis()->reusedSelection);
         QCOMPARE(model->eventAt(0)->duration,TimeNs(92316100)); table->setCurrentIndex(model->index(0,0));
         QVERIFY(window.timeline()->selectedEvent()); QCOMPARE(window.timeline()->selectedEvent()->id,model->eventAt(0)->id);
         auto* heat=window.findChild<FrameHeatmap*>(); QCOMPARE(heat->width(),window.timeline()->width());
         QTest::mouseClick(heat,Qt::LeftButton,Qt::NoModifier,QPoint(155,35));
         QTRY_VERIFY_WITH_TIMEOUT(model->analysis() && model->analysis()->range.end==1000000000,5000);
+        QVERIFY(!model->analysis()->reusedSelection);
         QVERIFY(model->rowCount()>0 && model->rowCount()<905);
         window.timeline()->resetViewport(); QTRY_COMPARE_WITH_TIMEOUT(model->rowCount(),905,5000);
     }

@@ -121,3 +121,28 @@ navigationChanged只描述真实导航能力，[MainWindow](../../src/ui_widgets
 验证：frameDetailsRemainReadableAtCompactWidth检查760像素面板中备注在空闲/100%进度状态均至少240像素宽，按钮不重叠，取消发出一次信号；分析失效后结束导出仍不能导出旧结果，新分析恢复后可用，备注不因分析刷新丢失。Debug/Release共69个实际用例通过。[截图](../../assets/screenshots/frame-details.png)使用两条合成测试帧，已目视检查，不能作为真实采集证据。
 
 取舍：减少重复说明不改变导出格式或冻结快照的语义；本轮验证的是面板状态和布局，真实写文件/原子替换/取消由原有导出测试覆盖。运行中动态更改应用字体和更窄的浮动面板仍需单独适配。
+
+## 第十轮：帧排序不必重新计算帧统计（Q08 / Q10）
+
+面试问题：后台排序不会卡住GUI，为什么用户仍要等待很久？缓存该按什么条件失效？
+
+复现：固定会话、范围和轨道，只点击帧明细的时长表头。原analyzeFrames仍重新判断每条帧的历史基线、计算百分位、扫描全会话热力桶，然后才排序。换排序方向并没有改变这些统计输入。
+
+解决思路：[canReuseFrameSelection](../../src/core/frame_analysis.cpp)检查源快照指针身份、半开范围和源轨道；不以版本号代替身份，也不把排序字段放进统计缓存键。[StatisticsController](../../src/application/statistics_controller.cpp)只把最近成功发布的匹配结果交给Worker，仍通过代次过滤迟到任务。
+
+```cpp
+out->reusedSelection=canReuseFrameSelection(previous,out->source,range,out->tracks);
+if(out->reusedSelection) {
+    out->summary=previous->summary;
+    copyFrameVector(out->rows,previous->rows,cancel);
+    // 热力数据同样复制到新结果，后续排序不会修改旧对象。
+}
+```
+
+旧分析可能仍被表格或导出线程读取，因此不原地排序。行和热力向量按1024项复制并检查取消；排序继续以稳定ID处理同值，重新建立ID到行号的映射。缓存不形成历史链，新范围直接冷算。
+
+验证：frameSortReuseMatchesColdAndInvalidates逐项比较八种列/方向组合的行ID、长帧标记、全部摘要、热力桶与映射；验证范围/轨道/同版本另一快照失效、预先取消和旧结果不变。frameControllerReusesPublishedSelection验证取消后快速替换只发布最新排序。905条真实夹具的UI测试验证表头命中缓存，点击热力图改变范围后失效。Debug/Release共71个实际用例通过。
+
+测量：[40条原始样本与方法](../../benchmarks/reports/FRAME_SORT.md)。百万合成帧时长排序中位数847.86→145.81ms，长帧标记排序800.17→142.63ms；每路径预热一次、正式五次，交替顺序，计时外验证完整结果。没有用合成数据冒充真实采集，也没有把后台耗时当交互P95。
+
+不足：仍需O(N)复制和新旧结果并存，未测峰值内存；分配/释放无法协作中断。当前缓存只能覆盖相同范围的排序，改变选区会重建全会话热图，未来可将会话级投影单独分层缓存，但需另行验证寿命与键。

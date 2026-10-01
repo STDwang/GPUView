@@ -42,6 +42,8 @@ struct FrameAnalysis {
     FrameSort sort = FrameSort::Start;
     /// 主键是否降序；同值仍以稳定ID升序确定顺序。
     bool descending = false;
+    /// 本次是否复用相同快照/范围/轨道的统计与行集合；用于验证缓存命中，不代表零复制。
+    bool reusedSelection = false;
     /// 按排序行索引借用源事件；越界抛异常，引用有效期依赖源快照。
     const Event& event(std::size_t row) const;
     /// 按稳定事件ID查当前排序行，不存在返回-1，避免跨排序沿用行号。
@@ -49,7 +51,11 @@ struct FrameAnalysis {
 };
 /// 跨线程发布只读分析，持有者共同延长源快照和行索引寿命。
 using FrameAnalysisPtr = std::shared_ptr<const FrameAnalysis>;
+/// 仅相同源快照身份、半开范围和源轨道可复用；排序方向不是统计输入。
+bool canReuseFrameSelection(const FrameAnalysisPtr& previous, const Snapshot& source, TimeRange range,
+    const std::vector<std::uint32_t>& tracks);
 /// 后台生成单帧组的范围统计、排序行索引、ID映射和全会话热力概览；支持取消，结果只读。
 FrameAnalysisPtr analyzeFrames(Snapshot source, TimeRange range, std::vector<std::uint32_t> tracks,
-    FrameSort sort = FrameSort::Start, bool descending = false, const CancelFlag& cancel = {});
+    FrameSort sort = FrameSort::Start, bool descending = false, const CancelFlag& cancel = {},
+    const FrameAnalysisPtr& previous = {});
 }

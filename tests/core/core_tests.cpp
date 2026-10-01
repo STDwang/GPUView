@@ -147,6 +147,56 @@ private slots:
         auto empty=analyzeFrames(store,{1000000000,2000000000},{0}); QCOMPARE(empty->summary.count,std::size_t(0));
         QVERIFY(!empty->heat.empty()); // 全会话热力图不能因选中空区间而丢失其他时间数据。
     }
+    /// 所有排序方向的复用结果与冷算逐项一致；换范围/轨道/同版本新快照失效，旧结果不被修改。
+    void frameSortReuseMatchesColdAndInvalidates() {
+        std::vector<Event> events;
+        for(int i=0;i<10241;++i) events.push_back({std::uint64_t(i+1),TimeNs(i)*1000000,i%31==0?70000000:1000000,0,0});
+        const auto source=buildStore(std::move(events),{"frames"},{"Present"},1,{}, {},false,true);
+        const auto previous=analyzeFrames(source,source->bounds,{0});
+        for(auto sort:{FrameSort::Id,FrameSort::Start,FrameSort::Duration,FrameSort::LongFrame}) for(bool descending:{false,true}) {
+            const auto cold=analyzeFrames(source,source->bounds,{0},sort,descending);
+            const auto reused=analyzeFrames(source,source->bounds,{0},sort,descending,{},previous);
+            QVERIFY(reused->reusedSelection); QVERIFY(!cold->reusedSelection); QCOMPARE(reused->idRows,cold->idRows);
+            QCOMPARE(reused->rows.size(),cold->rows.size()); QCOMPARE(reused->heatOverview,cold->heatOverview);
+            QCOMPARE(reused->summary.count,cold->summary.count); QCOMPARE(reused->summary.longFrames,cold->summary.longFrames);
+            QCOMPARE(reused->summary.sumMs,cold->summary.sumMs); QCOMPARE(reused->summary.meanMs,cold->summary.meanMs);
+            QCOMPARE(reused->summary.p50Ms,cold->summary.p50Ms); QCOMPARE(reused->summary.p95Ms,cold->summary.p95Ms);
+            QCOMPARE(reused->summary.p99Ms,cold->summary.p99Ms); QCOMPARE(reused->summary.histogram,cold->summary.histogram);
+            QCOMPARE(reused->summary.longest->id,cold->summary.longest->id);
+            QCOMPARE(reused->summary.longEvents.size(),cold->summary.longEvents.size());
+            for(std::size_t i=0;i<cold->summary.longEvents.size();++i) QCOMPARE(reused->summary.longEvents[i].id,cold->summary.longEvents[i].id);
+            QCOMPARE(reused->heat.size(),cold->heat.size());
+            for(std::size_t i=0;i<cold->heat.size();++i) {
+                QCOMPARE(reused->heat[i].begin,cold->heat[i].begin); QCOMPARE(reused->heat[i].count,cold->heat[i].count);
+                QCOMPARE(reused->heat[i].maximum,cold->heat[i].maximum);
+            }
+            for(std::size_t i=0;i<cold->rows.size();++i) {
+                QCOMPARE(reused->event(i).id,cold->event(i).id); QCOMPARE(reused->rows[i].longFrame,cold->rows[i].longFrame);
+            }
+        }
+        QCOMPARE(previous->event(0).id,std::uint64_t(1)); QCOMPARE(previous->sort,FrameSort::Start);
+        QVERIFY(!analyzeFrames(source,{0,1000000},{0},FrameSort::Id,false,{},previous)->reusedSelection);
+        QVERIFY(!analyzeFrames(source,source->bounds,{},FrameSort::Id,false,{},previous)->reusedSelection);
+        const auto other=buildStore({{1,0,1000000,0,0}},{"frames"},{"Present"},1,{}, {},false,true);
+        QVERIFY(!analyzeFrames(other,source->bounds,{0},FrameSort::Id,false,{},previous)->reusedSelection);
+        auto cancelled=std::make_shared<std::atomic_bool>(true);
+        QVERIFY_THROWS_EXCEPTION(Cancelled,analyzeFrames(source,source->bounds,{0},FrameSort::Id,false,cancelled,previous));
+    }
+    /// 控制器仅复用已发布结果，取消/快速替换仍只发布最新排序；换会话不能沿用旧缓存。
+    void frameControllerReusesPublishedSelection() {
+        auto source=buildStore({{1,0,2000000,0,0},{2,3000000,1000000,0,0}},{"frames"},{"Present"},1,{}, {},false,true);
+        StatisticsController controller; QSignalSpy ready(&controller,&StatisticsController::ready);
+        controller.request(source,source->bounds,{0}); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),1,5000);
+        const auto old=controller.frameDetails(); QVERIFY(!old->reusedSelection);
+        controller.cancel(); controller.request(source,source->bounds,{0},FrameSort::Duration,true);
+        controller.request(source,source->bounds,{0},FrameSort::Duration,false);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(),2,5000);
+        QVERIFY(controller.frameDetails()->reusedSelection); QCOMPARE(controller.frameDetails()->event(0).id,std::uint64_t(2));
+        QCOMPARE(old->event(0).id,std::uint64_t(1));
+        controller.request(source,source->bounds,{0}); controller.cancel(); QTest::qWait(50); QCOMPARE(ready.count(),2);
+        controller.request(source,{0,1},{0}); QTRY_COMPARE_WITH_TIMEOUT(ready.count(),3,5000);
+        QVERIFY(!controller.frameDetails()->reusedSelection); QCOMPARE(controller.result().count,std::size_t(1));
+    }
     /// 把公开CSV的独立SHA-256与解析器摘要对照，并检查有效/排除记录计数。
     void importedBytesHaveMatchingHashAndQuality() {
         const auto path=QFINDTESTDATA("../../data/samples/presentmon-real.csv"); QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
