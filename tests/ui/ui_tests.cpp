@@ -36,6 +36,25 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 同列悬停和名称区移动不反复绘制时间轴，横向移动及离开仍更新十字线。
+    void hoverRepaintsOnlyWhenCrosshairChanges() {
+        TimelineWidget timeline; timeline.resize(1000,360); timeline.setSnapshot(generateTrace(10000,1)); timeline.show();
+        QCoreApplication::processEvents(); QSignalSpy painted(&timeline,&TimelineWidget::diagnosticsChanged);
+        // 直接发送逻辑坐标事件，不依赖系统光标的位置或窗口焦点。
+        const auto move=[&](QPointF point) {
+            QMouseEvent event(QEvent::MouseMove,point,point,Qt::NoButton,Qt::NoButton,Qt::NoModifier);
+            QApplication::sendEvent(&timeline,&event); QCoreApplication::processEvents();
+        };
+        move({300,70}); QVERIFY(painted.count()>0); painted.clear();
+        move({300,75}); move({300,80}); QCOMPARE(painted.count(),0);
+        move({310,80}); QVERIFY(painted.count()>0); painted.clear();
+        move({100,80}); QVERIFY(painted.count()>0); painted.clear();
+        move({110,80}); move({120,80}); QCOMPARE(painted.count(),0);
+        move({300,80}); painted.clear();
+        QEvent leave(QEvent::Leave); QApplication::sendEvent(&timeline,&leave); QCoreApplication::processEvents();
+        QVERIFY(painted.count()>0); painted.clear();
+        QApplication::sendEvent(&timeline,&leave); QCoreApplication::processEvents(); QCOMPARE(painted.count(),0);
+    }
     /// 拖动由发起按钮拥有；无关按钮不能中断，过滤/全览后的迟到释放不能恢复旧选区。
     void timelineGesturesRespectButtonsAndContext() {
         TimelineWidget timeline; timeline.resize(1000,360); timeline.show();

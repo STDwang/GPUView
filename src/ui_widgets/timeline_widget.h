@@ -88,6 +88,8 @@ private:
     void publishNavigation();
     /// 结束平移手势，若回到起点则撤掉本手势产生的无效历史；不撤销有效位移。
     void finishPanGesture();
+    /// 仅十字线位置变化时请求重绘；名称区/留白不显示十字线，提示文字仍可独立更新。
+    void updateHoverPosition(const QPoint& point);
     /// 把纵坐标映射为源轨道ID；超出绘图区或显示映射返回-1。
     int trackAt(int y) const;
     /// 以gutter为原点把横坐标映射为视口内纳秒时刻。
@@ -108,7 +110,7 @@ private:
     std::vector<TimeRange> history_;
     /// 选中事件值副本，换快照或清除选择时重置。
     std::optional<Event> selectedEvent_;
-    /// 悬停逻辑像素位置，负坐标表示鼠标已离开。
+    /// 十字线逻辑像素位置，纵坐标归一化为top；负坐标表示当前不显示十字线。
     QPoint hover_{-1, -1};
     /// 几何缓存开关，用于性能消融对照。
     bool cacheEnabled_ = true;

@@ -104,7 +104,13 @@ int TimelineWidget::trackAt(int y) const {
     return index < tracks_.size() ? int(tracks_[index]) : -1;
 }
 /// 清除悬停并调用基类，避免鼠标离开后残留高亮。
-void TimelineWidget::leaveEvent(QEvent* event) { hover_ = {-1, -1}; QToolTip::hideText(); update(); QWidget::leaveEvent(event); }
+void TimelineWidget::leaveEvent(QEvent* event) { updateHoverPosition({-1,-1}); QToolTip::hideText(); QWidget::leaveEvent(event); }
+/// 十字线只由横坐标决定；同列纵向移动不重复绘制时间轴，轨道提示由mouseMove独立处理。
+void TimelineWidget::updateHoverPosition(const QPoint& point) {
+    const QPoint next=point.x()>=gutter && point.x()<width()-12 && trackAt(point.y())>=0 ? QPoint(point.x(),top) : QPoint(-1,-1);
+    if(next==hover_) return;
+    hover_=next; update();
+}
 /// 恢复全会话并清除选择，发布范围变化同步其他图表和统计。
 void TimelineWidget::resetViewport() {
     finishPanGesture(); selecting_=false;
@@ -253,7 +259,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (!snapshot_) return;
     const auto point = event->position().toPoint();
-    hover_ = point;
+    updateHoverPosition(point);
     if (!panning_ && !selecting_) {
         const int track = trackAt(point.y());
         if (track >= 0 && point.x() < gutter) QToolTip::showText(event->globalPosition().toPoint(), QString::fromStdString(snapshot_->tracks[track].name), this);
@@ -263,7 +269,6 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
             QToolTip::showText(event->globalPosition().toPoint(), QStringLiteral("时间 %1 ms\n概览桶相交事件 %2（近似范围，非利用率）")
                 .arg(double(time) / 1e6, 0, 'f', 6).arg(snapshot_->tracks[track].overviewCounts[bucket]), this);
         } else QToolTip::hideText();
-        update();
     }
     if (panning_) {
         const auto before=viewport_.range();
