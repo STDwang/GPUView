@@ -32,6 +32,7 @@
 - 紧凑事件结构与每轨道区间索引，对照朴素扫描验证正确性。
 - QWidget/QPainter自绘、轨道裁剪、密集视口概览LOD、精确点击拾取。
 - 时间轴滚轮锚点缩放、名称区滚轮上下滚动、中键平移、框选、Home全览、Esc清除。
+- 时间轴拖动仅由发起按钮结束，其他按钮不会中断；轨道过滤/全览中止旧手势，空轨道及右侧留白不启动框选，越界隐藏旧悬停提示。
 - 事件/轨道高亮、详情联动、缩放到选区、上一视图、轨道勾选/过滤/分组折叠。
 - 后台精确统计：数量、总时长、均值、P50/P95/P99、时长分布、最长项定位。Trace按相交时长裁剪；帧按Present时刻归属。
 - PresentMon v1 CSV：引号/BOM/数值校验、无效记录报告、进程/交换链分组；帧间隔曲线、60FPS预算长帧规则、前200条长帧列表（计数不截断）。
@@ -139,4 +140,4 @@ core不依赖Qt；UI不解析文件，不管理worker内部数据。不为每个
 
 帧明细新增证据：[百万帧测量](benchmarks/reports/FRAME_ANALYSIS.md) · [问题、代码与练习](docs/07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。Debug/Release均通过52个实际用例（Core 42 + UI 10，不含初始化和清理）。
 
-2026-10-01：Debug/Release均通过71个实际用例（Core 49 + UI 22）。[事件排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms，事件时长排序未改善；[帧排序对照](benchmarks/reports/FRAME_SORT.md)：百万合成帧的间隔排序中位数847.86→145.81ms。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。
+2026-10-01：Debug/Release均通过72个实际用例（Core 49 + UI 23）。[事件排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms，事件时长排序未改善；[帧排序对照](benchmarks/reports/FRAME_SORT.md)：百万合成帧的间隔排序中位数847.86→145.81ms。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。

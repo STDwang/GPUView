@@ -24,6 +24,7 @@ void TimelineWidget::setSnapshot(Snapshot snapshot) {
     firstTrack_ = 0;
     selection_.reset(); selectedEvent_.reset(); history_.clear();
     selecting_=panning_=panHistorySaved_=false; hover_={-1,-1};
+    QToolTip::hideText();
     tracks_.clear();
     if (snapshot_) for (std::uint32_t i = 0; i < snapshot_->tracks.size(); ++i) tracks_.push_back(i);
     cache_.clear();
@@ -51,6 +52,7 @@ void TimelineWidget::finishPanGesture() {
 }
 /// 替换可见轨道ID映射并使缓存失效；过滤后行号不等于源轨道ID。
 void TimelineWidget::setTracks(std::vector<std::uint32_t> tracks) {
+    finishPanGesture(); selecting_=false; hover_={-1,-1}; QToolTip::hideText();
     tracks_.clear();
     if (snapshot_) for (auto id : tracks) if (id < snapshot_->tracks.size() && std::find(tracks_.begin(), tracks_.end(), id) == tracks_.end()) tracks_.push_back(id);
     cache_.clear();
@@ -102,9 +104,10 @@ int TimelineWidget::trackAt(int y) const {
     return index < tracks_.size() ? int(tracks_[index]) : -1;
 }
 /// 清除悬停并调用基类，避免鼠标离开后残留高亮。
-void TimelineWidget::leaveEvent(QEvent* event) { hover_ = {-1, -1}; update(); QWidget::leaveEvent(event); }
+void TimelineWidget::leaveEvent(QEvent* event) { hover_ = {-1, -1}; QToolTip::hideText(); update(); QWidget::leaveEvent(event); }
 /// 恢复全会话并清除选择，发布范围变化同步其他图表和统计。
 void TimelineWidget::resetViewport() {
+    finishPanGesture(); selecting_=false;
     if (snapshot_) {
         const auto previous=viewport_.range(); viewport_.reset(snapshot_->bounds);
         if(!(previous==viewport_.range())) rememberView(previous);
@@ -235,7 +238,10 @@ void TimelineWidget::wheelEvent(QWheelEvent* event) {
 }
 /// 根据按键和命中开始选择/平移或发布事件；输入坐标为逻辑像素。
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
-    if (!snapshot_ || event->position().x() < gutter || event->position().y() < top) return;
+    // 一个手势只由发起按钮拥有；其他按钮和绘图区留白不能覆盖已有拖动状态。
+    if (!snapshot_ || panning_ || selecting_ ||
+        (event->button()!=Qt::LeftButton && event->button()!=Qt::MiddleButton) ||
+        event->position().x()<gutter || event->position().x()>=width()-12 || trackAt(int(event->position().y()))<0) return;
     setFocus();
     press_ = previous_ = event->position().toPoint();
     panning_ = event->button() == Qt::MiddleButton;
@@ -251,12 +257,12 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (!panning_ && !selecting_) {
         const int track = trackAt(point.y());
         if (track >= 0 && point.x() < gutter) QToolTip::showText(event->globalPosition().toPoint(), QString::fromStdString(snapshot_->tracks[track].name), this);
-        else if (track >= 0) {
+        else if (track >= 0 && point.x()<width()-12) {
             const auto time = timeAt(point.x());
             const auto bucket = std::min<std::size_t>(std::size_t(time / snapshot_->bucketWidth), snapshot_->tracks[track].overviewCounts.size() - 1);
             QToolTip::showText(event->globalPosition().toPoint(), QStringLiteral("时间 %1 ms\n概览桶相交事件 %2（近似范围，非利用率）")
                 .arg(double(time) / 1e6, 0, 'f', 6).arg(snapshot_->tracks[track].overviewCounts[bucket]), this);
-        }
+        } else QToolTip::hideText();
         update();
     }
     if (panning_) {
@@ -275,6 +281,8 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 /// 结束拖动并提交框选；短点击精确拾取，避免误触范围统计。
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (!snapshot_) return;
+    // 例如左键框选时释放右键，应继续等待左键释放，而不是提前提交选区。
+    if((selecting_ && event->button()!=Qt::LeftButton) || (panning_ && event->button()!=Qt::MiddleButton)) return;
     if (selecting_) {
         if ((event->position().toPoint() - press_).manhattanLength() < 4) {
             selection_.reset();

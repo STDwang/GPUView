@@ -36,6 +36,35 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 拖动由发起按钮拥有；无关按钮不能中断，过滤/全览后的迟到释放不能恢复旧选区。
+    void timelineGesturesRespectButtonsAndContext() {
+        TimelineWidget timeline; timeline.resize(1000,360); timeline.show();
+        const auto source=generateTrace(10000,1); timeline.setSnapshot(source);
+        QSignalSpy selected(&timeline,&TimelineWidget::rangeSelected);
+        QSignalSpy cleared(&timeline,&TimelineWidget::selectionCleared);
+        QTest::mousePress(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(300,70));
+        QTest::mouseMove(&timeline,QPoint(500,70));
+        QTest::mouseClick(&timeline,Qt::RightButton,Qt::NoModifier,QPoint(500,70)); QCOMPARE(selected.count(),0);
+        QTest::mouseRelease(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(500,70)); QCOMPARE(selected.count(),1);
+        const auto clearCount=cleared.count();
+        QTest::mouseClick(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(995,70)); QCOMPARE(cleared.count(),clearCount);
+        QTest::mousePress(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(300,70)); QTest::mouseMove(&timeline,QPoint(500,70));
+        timeline.setTracks({0}); QTest::mouseMove(&timeline,QPoint(600,70));
+        QTest::mouseRelease(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(600,70)); QCOMPARE(selected.count(),1);
+        QTest::mousePress(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(300,55)); QTest::mouseMove(&timeline,QPoint(500,55));
+        timeline.resetViewport(); QTest::mouseMove(&timeline,QPoint(600,55));
+        QTest::mouseRelease(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(600,55)); QCOMPARE(selected.count(),1);
+        const auto full=timeline.visibleRange(); timeline.showRange({full.end/4,full.end/2});
+        QTest::mousePress(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(500,55)); QTest::mouseMove(&timeline,QPoint(480,55));
+        const auto beforeUnrelatedRelease=timeline.visibleRange();
+        QTest::mouseRelease(&timeline,Qt::RightButton,Qt::NoModifier,QPoint(480,55)); QTest::mouseMove(&timeline,QPoint(460,55));
+        QVERIFY(!(timeline.visibleRange()==beforeUnrelatedRelease));
+        QTest::mouseRelease(&timeline,Qt::MiddleButton,Qt::NoModifier,QPoint(460,55));
+        timeline.setTracks({}); const auto emptyClearCount=cleared.count();
+        QTest::mousePress(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(300,70)); QTest::mouseMove(&timeline,QPoint(600,70));
+        QTest::mouseRelease(&timeline,Qt::LeftButton,Qt::NoModifier,QPoint(600,70));
+        QCOMPARE(selected.count(),1); QCOMPARE(cleared.count(),emptyClearCount);
+    }
     /// 帧明细在较窄面板和导出忙状态仍容纳操作，行高要留出实际字体及上下内边距。
     void frameDetailsRemainReadableAtCompactWidth() {
         FrameDetailsPanel panel; panel.setStyleSheet(darkTheme()); panel.resize(760,300); panel.show();
