@@ -95,3 +95,17 @@ navigationChanged只描述真实导航能力，[MainWindow](../../src/ui_widgets
 验证：navigationActionsFollowEffectiveChanges覆盖初始禁用、重复全览/相同范围、中键点击、边界缩放、选区缩放及返回；panGestureHistoryAndSnapshotReset覆盖多次移动只返回一次、拖回原点后Esc、按住鼠标换数据后迟到释放。Debug/Release共67个实际用例通过。
 
 边界：历史仅保存时间视口，不是完整会话撤销栈，不恢复轨道过滤或统计条件。本轮没有以事件数量或测试数量宣称性能提高；边界滚轮只是不再发出无效viewportChanged。
+
+## 第八轮：绘图区与拾取边界
+
+面试问题：图表画得正确，为什么点击空白处仍会定位到别的帧？
+
+复现：在仅含10、50、90纳秒三个Present时刻的测试数据中，将视口设为[20,50)，可见范围内没有帧起点。旧实现向完整事件数组二分查找最近项，因此点击仍能选到范围外的帧；右键和标题区也没有排除。
+
+解决思路：[FrameTimeWidget::mousePressEvent](../../src/ui_widgets/frame_time_widget.cpp)先检查左键和绘图区几何，再以两次lower_bound限定半开视口内的帧起点，最后在该子范围里查找最近的原始帧。没有候选即返回，不从外部范围补选。查询保持O(log N)，无需扫描百万事件。帧按Present起点归属，这与Trace区间相交查询的语义不同。
+
+[FrameHeatmap::insideBand](../../src/ui_widgets/frame_heatmap.cpp)让点击和悬停共用色带范围；右边界及底边界不属于色带。离开色带或控件隐藏旧提示，避免读到上一位置的数据。bucketAt仍是可夹紧的坐标转换函数，鼠标事件入口负责判断是否允许调用。
+
+验证：chartPickingRespectsPlotAndVisibleSamples检查右键、标题、右侧留白无信号，有效左击能选中可见帧，空视口和恰好位于end的帧不被选中；同时检查热力图边缘与有效色带。Debug/Release共68个实际用例通过。
+
+边界：帧图选择的是光标时刻附近的可见原始帧，并不承诺密集LOD像素所代表的最大帧就是该次选择结果。热力图颜色可能聚合多个秒桶，点击仍按光标时刻选择原始一秒桶；不得把显示聚合冒充精确源值。

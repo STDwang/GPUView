@@ -7,6 +7,12 @@
 #include <algorithm>
 #include <cmath>
 namespace gpuview {
+/// 几何与paintEvent的色带一致；右侧12像素留白不属于数据区域。
+bool FrameHeatmap::insideBand(QPointF position) const {
+    return position.x()>=150 && position.x()<width()-12 && position.y()>=27 && position.y()<49;
+}
+/// 工具提示跟随有效色带，不把离开后的上一次值误认为当前鼠标位置。
+void FrameHeatmap::leaveEvent(QEvent* event) { QToolTip::hideText(); QWidget::leaveEvent(event); }
 /// 把横坐标映射为会话内1秒桶的半开纳秒范围；无数据时返回空范围。
 TimeRange FrameHeatmap::bucketAt(int x) const {
     if(!analysis_) return {0,0};
@@ -41,13 +47,13 @@ void FrameHeatmap::paintEvent(QPaintEvent*) {
 }
 /// 将有效左击映射为1秒桶选区并发出rangePicked，不修改全会话热力数据。
 void FrameHeatmap::mousePressEvent(QMouseEvent* event) {
-    if(event->button()!=Qt::LeftButton || event->position().x()<150 || event->position().y()<27 || event->position().y()>49) return;
+    if(event->button()!=Qt::LeftButton || !insideBand(event->position())) return;
     const auto range=bucketAt(int(event->position().x()));
     if(range.end>range.begin) emit rangePicked(range.begin,range.end);
 }
 /// 按鼠标时刻查原始稀疏秒桶显示数量/max，区分精确桶值与概览像素聚合。
 void FrameHeatmap::mouseMoveEvent(QMouseEvent* event) {
-    if(!analysis_ || event->position().x()<150) return;
+    if(!analysis_ || !insideBand(event->position())) { QToolTip::hideText(); return; }
     const auto range=bucketAt(int(event->position().x()));
     // 稀疏秒桶按起点有序；二分查询鼠标所指原始桶，不把概览像素误作单桶统计。
     const auto it=std::lower_bound(analysis_->heat.begin(),analysis_->heat.end(),range.begin,[](const HeatBin& b,TimeNs t) { return b.begin<t; });

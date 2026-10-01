@@ -37,14 +37,20 @@ void FrameTimeWidget::paintEvent(QPaintEvent*) {
 }
 /// 查询点击时刻附近的源帧并发出framePicked供上层联动定位。
 void FrameTimeWidget::mousePressEvent(QMouseEvent* event) {
-    if(!snapshot_ || track_>=snapshot_->tracks.size() || event->position().x()<150) return;
+    if(!snapshot_ || track_>=snapshot_->tracks.size() || event->button()!=Qt::LeftButton ||
+        event->position().x()<150 || event->position().x()>=width()-12 ||
+        event->position().y()<35 || event->position().y()>=height()-10 || range_.end<=range_.begin) return;
     const double fraction=std::clamp((event->position().x()-150)/std::max(1,width()-162),0.0,1.0);
     const auto time=range_.begin+TimeNs(fraction*(range_.end-range_.begin));
     const auto& events=snapshot_->tracks[track_].index.events();
-    // 源事件按Present起点有序，二分找到光标时间附近的帧再由后续逻辑比较邻居。
-    auto it=std::lower_bound(events.begin(),events.end(),time,[](const Event& e,TimeNs t) { return e.start<t; });
-    if(it==events.end()) { if(events.empty()) return; --it; }
-    else if(it!=events.begin() && time-(it-1)->start<it->start-time) --it;
+    // 先限定当前半开视口，避免空时间段点击把用户带到不可见的历史/未来帧。
+    const auto earlier=[](const Event& e,TimeNs t) { return e.start<t; };
+    const auto first=std::lower_bound(events.begin(),events.end(),range_.begin,earlier);
+    const auto last=std::lower_bound(first,events.end(),range_.end,earlier);
+    if(first==last) return;
+    auto it=std::lower_bound(first,last,time,earlier);
+    if(it==last) --it;
+    else if(it!=first && time-(it-1)->start<it->start-time) --it;
     emit framePicked(*it);
 }
 }

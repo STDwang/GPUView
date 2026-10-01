@@ -24,7 +24,11 @@ protected:
     void mousePressEvent(QMouseEvent*) override;
     /// 按鼠标时刻查原始稀疏秒桶显示数量/max，区分精确桶值与概览像素聚合。
     void mouseMoveEvent(QMouseEvent*) override;
+    /// 离开概览控件时清除提示，避免旧桶值残留在其他面板上。
+    void leaveEvent(QEvent* event) override;
 private:
+    /// 点击和悬停共用色带的半开命中边界，不响应标题、图例或右侧留白。
+    bool insideBand(QPointF position) const;
     /// 共享只读分析，延长源数据寿命；GUI发布时整体替换。
     FrameAnalysisPtr analysis_;
 };

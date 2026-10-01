@@ -36,6 +36,27 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 帧图仅接受绘图区左击，最近帧必须属于半开可见范围；热力图留白不映射末桶。
+    void chartPickingRespectsPlotAndVisibleSamples() {
+        auto source=buildStore({{1,10,5,0,0},{2,50,5,0,0},{3,90,5,0,0}},{"frame"},{"Present"},1,{}, {},false,true);
+        FrameTimeWidget chart; chart.resize(600,150); chart.setData(source,0); chart.show();
+        std::uint64_t id=0;
+        // 记录源ID而不是绘制像素，验证命中返回的是可见原始记录。
+        connect(&chart,&FrameTimeWidget::framePicked,&chart,[&id](const Event& event) { id=event.id; });
+        chart.setRange({40,60});
+        QTest::mouseClick(&chart,Qt::RightButton,Qt::NoModifier,QPoint(300,70)); QCOMPARE(id,std::uint64_t(0));
+        QTest::mouseClick(&chart,Qt::LeftButton,Qt::NoModifier,QPoint(300,15)); QCOMPARE(id,std::uint64_t(0));
+        QTest::mouseClick(&chart,Qt::LeftButton,Qt::NoModifier,QPoint(590,70)); QCOMPARE(id,std::uint64_t(0));
+        QTest::mouseClick(&chart,Qt::LeftButton,Qt::NoModifier,QPoint(155,70)); QCOMPARE(id,std::uint64_t(2));
+        id=0; chart.setRange({20,50}); // 终点50处的帧也不属于当前视口。
+        QTest::mouseClick(&chart,Qt::LeftButton,Qt::NoModifier,QPoint(580,70)); QCOMPARE(id,std::uint64_t(0));
+        FrameHeatmap heat; heat.resize(600,78); heat.setAnalysis(analyzeFrames(source,source->bounds,{0})); heat.show();
+        QSignalSpy picked(&heat,&FrameHeatmap::rangePicked);
+        QTest::mouseClick(&heat,Qt::LeftButton,Qt::NoModifier,QPoint(590,35));
+        QTest::mouseClick(&heat,Qt::LeftButton,Qt::NoModifier,QPoint(300,49));
+        QTest::mouseClick(&heat,Qt::LeftButton,Qt::NoModifier,QPoint(300,18)); QCOMPARE(picked.count(),0);
+        QTest::mouseClick(&heat,Qt::LeftButton,Qt::NoModifier,QPoint(150,27)); QCOMPARE(picked.count(),1);
+    }
     /// 导航动作只反映实际可执行操作；全览边界、重复范围和中键点击不制造虚假返回历史。
     void navigationActionsFollowEffectiveChanges() {
         MainWindow window; window.show();
