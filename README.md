@@ -27,6 +27,7 @@
 - 相同筛选下复用事件搜索结果，按变化的表独立排序；单项缓存、完整筛选键及不可变旧结果保证一致性。
 - 表格选中的轨道已可见时保持滚动位置，越界才最小滚动；“视图 → 恢复默认面板布局”不改数据和搜索条件，加载进度只在忙时出现。
 - 真实帧工作区适配1200×800逻辑像素；时间刻度按字体宽度减少数量，避免重叠。已验证100%/150%离屏布局，[紧凑窗口截图](assets/screenshots/compact-150.png)。
+- 统计侧栏优先显示数量/均值/P95/P99与当前范围类型，详细口径和分布可滚动阅读；无有效样本时清空旧值并显示恢复提示。
 - 紧凑事件结构与每轨道区间索引，对照朴素扫描验证正确性。
 - QWidget/QPainter自绘、轨道裁剪、密集视口概览LOD、精确点击拾取。
 - 时间轴滚轮锚点缩放、名称区滚轮上下滚动、中键平移、框选、Home全览、Esc清除。
@@ -134,4 +135,4 @@ core不依赖Qt；UI不解析文件，不管理worker内部数据。不为每个
 
 帧明细新增证据：[百万帧测量](benchmarks/reports/FRAME_ANALYSIS.md) · [问题、代码与练习](docs/07-interview/FRAME_ANALYSIS_WALKTHROUGH.md)。Debug/Release均通过52个实际用例（Core 42 + UI 10，不含初始化和清理）。
 
-2026-10-01：Debug/Release均通过64个实际用例（Core 47 + UI 17）。[同机排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms；事件时长排序本轮未改善。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。
+2026-10-01：Debug/Release均通过65个实际用例（Core 47 + UI 18）。[同机排序对照](benchmarks/reports/EVENT_SORT.md)：百万事件的名称汇总排序中位数200.30→7.84ms；事件时长排序本轮未改善。仅算法计时，不包含输入防抖、GUI排队或绘制；[面试讲解](docs/07-interview/UI_REFINEMENT.md)说明缓存、内存和布局取舍。

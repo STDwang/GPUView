@@ -62,6 +62,8 @@
     <ClInclude Include="src\ui_widgets\frame_time_widget.h"><Filter>src\ui_widgets</Filter></ClInclude>
     <ClCompile Include="src\ui_widgets\main_window.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
     <ClInclude Include="src\ui_widgets\main_window.h"><Filter>src\ui_widgets</Filter></ClInclude>
+    <ClCompile Include="src\ui_widgets\statistics_view.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
+    <ClInclude Include="src\ui_widgets\statistics_view.h"><Filter>src\ui_widgets</Filter></ClInclude>
     <ClCompile Include="src\ui_widgets\theme.cpp"><Filter>src\ui_widgets</Filter></ClCompile>
     <ClInclude Include="src\ui_widgets\theme.h"><Filter>src\ui_widgets</Filter></ClInclude>
     <ClCompile Include="src\ui_widgets\time_axis.cpp"><Filter>src\ui_widgets</Filter></ClCompile>

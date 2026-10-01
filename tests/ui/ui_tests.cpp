@@ -17,6 +17,9 @@
 #include "ui_widgets/event_explorer.h"
 #include "ui_widgets/theme.h"
 #include "ui_widgets/time_axis.h"
+#include "ui_widgets/statistics_view.h"
+#include <QTextDocument>
+#include <QTextCursor>
 #include <QPushButton>
 #include <QDoubleSpinBox>
 #include <QTableView>
@@ -33,6 +36,20 @@ class UiTests : public QObject {
 private slots:
     /// 使用实际应用的中文字体和样式，避免默认测试字体掩盖窗口最小尺寸问题。
     void initTestCase() { configureApplicationTheme(*qApp); }
+    /// 较矮统计区域无需滚动即可看到P99；空结果不能保留上次的有效值，Trace不能冒充FPS。
+    void compactStatisticsPrioritizeMetricsAndClearEmptyValues() {
+        Statistics stats; stats.count=905; stats.meanMs=8.192; stats.p95Ms=7.735; stats.p99Ms=82.945;
+        QTextBrowser browser; browser.setStyleSheet(darkTheme()); browser.resize(290,120);
+        browser.setHtml(statisticsHtml(stats,true,std::nullopt)); browser.show();
+        QCoreApplication::processEvents();
+        const auto cursor=browser.document()->find("82.945"); QVERIFY(!cursor.isNull());
+        QVERIFY2(browser.cursorRect(cursor).bottom()<=browser.viewport()->height(),"P99 must fit the initial viewport");
+        browser.setHtml(statisticsHtml({},true,TimeRange{0,1}));
+        QVERIFY(browser.toPlainText().contains(QStringLiteral("当前范围无有效样本")));
+        QVERIFY(browser.toPlainText().contains("N/A")); QVERIFY(!browser.toPlainText().contains("82.945"));
+        browser.setHtml(statisticsHtml(stats,false,std::nullopt));
+        QVERIFY(browser.toPlainText().contains(QStringLiteral("并发求和"))); QVERIFY(!browser.toPlainText().contains("FPS"));
+    }
     /// 不同范围、宽度、字体下标签均不越界/重叠；减少刻度不能改变首末时间位置。
     void timeAxisLabelsFitAvailableWidth() {
         for(int pointSize:{10,16}) {
@@ -207,6 +224,13 @@ private slots:
         QVERIFY(window.timeline()->selectedEvent()->duration>33333333);
         QVERIFY(window.timeline()->visibleRange().end-window.timeline()->visibleRange().begin<original.end-original.begin);
         QCOMPARE(window.findChild<QTabWidget*>("detailTabs")->currentIndex(),0);
+        // 清空可见轨道必须真正发布空分析，不能只在格式化函数中模拟空状态。
+        auto* summary=window.findChild<QTextBrowser*>("statisticsSummary");
+        auto* filter=window.findChild<QLineEdit*>("trackFilter"); filter->setText("no-matching-track");
+        QTRY_VERIFY_WITH_TIMEOUT(summary->toPlainText().contains(QStringLiteral("当前范围无有效样本")),5000);
+        QCOMPARE(table->rowCount(),0); QVERIFY(!window.findChild<QPushButton*>("locateLongest")->isEnabled());
+        filter->clear(); QTRY_VERIFY_WITH_TIMEOUT(summary->toPlainText().contains("82.945"),5000);
+        QVERIFY(window.findChild<QPushButton*>("locateLongest")->isEnabled());
     }
 
     /// 验证点击事件、详情选择、框选缩放与上一视图恢复。

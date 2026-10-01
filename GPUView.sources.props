@@ -44,6 +44,8 @@
     <ClInclude Include="src\ui_widgets\frame_time_widget.h" />
     <ClCompile Include="src\ui_widgets\main_window.cpp" />
     <ClInclude Include="src\ui_widgets\main_window.h" />
+    <ClCompile Include="src\ui_widgets\statistics_view.cpp" />
+    <ClInclude Include="src\ui_widgets\statistics_view.h" />
     <ClCompile Include="src\ui_widgets\theme.cpp" />
     <ClInclude Include="src\ui_widgets\theme.h" />
     <ClCompile Include="src\ui_widgets\time_axis.cpp" />

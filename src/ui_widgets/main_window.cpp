@@ -2,6 +2,7 @@
 /// @brief Widgets应用组装入口；连接导航、时间轴、统计与导出，不直接解析文件或跑重计算。
 #include "ui_widgets/main_window.h"
 #include "ui_widgets/theme.h"
+#include "ui_widgets/statistics_view.h"
 #include "ui_widgets/frame_time_widget.h"
 #include "ui_widgets/frame_details_panel.h"
 #include "ui_widgets/event_explorer.h"
@@ -83,9 +84,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* analysisPage = new QWidget; auto* analysisLayout = new QVBoxLayout(analysisPage);
     auto* group = new QComboBox; group->setObjectName("statisticsGroup"); analysisLayout->addWidget(group);
     auto* summary = new QTextBrowser; summary->setObjectName("statisticsSummary"); summary->setMinimumHeight(120); analysisLayout->addWidget(summary,1);
-    auto* longest = new QPushButton(QStringLiteral("定位最长事件 / 帧")); longest->setEnabled(false); analysisLayout->addWidget(longest);
+    auto* longest = new QPushButton(QStringLiteral("定位最长事件 / 帧")); longest->setObjectName("locateLongest"); longest->setEnabled(false); analysisLayout->addWidget(longest);
     auto* longTable = new QTableWidget(0,2); longTable->setObjectName("longFrames"); longTable->setHorizontalHeaderLabels({QStringLiteral("长帧时刻 ms"),QStringLiteral("帧间隔 ms")});
     longTable->setEditTriggers(QAbstractItemView::NoEditTriggers); longTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    longTable->setAlternatingRowColors(true); longTable->setShowGrid(false);
     longTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); analysisLayout->addWidget(longTable,1);
     tabs->addTab(analysisPage,QStringLiteral("统计"));
     auto* learning = new QTextBrowser;
@@ -199,21 +201,13 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         framesPanel->setAnalysis(statistics_.frameDetails()); heatmap->setAnalysis(statistics_.frameDetails());
         if(const auto selected=timeline_->selectedEvent()) framesPanel->selectId(selected->id);
         const auto& stats=statistics_.result(); const bool frames=controller_.snapshot()->frames;
-        QString text = range->has_value() ? QStringLiteral("选区 [%1, %2) ms\n").arg(double((*range)->begin)/1e6).arg(double((*range)->end)/1e6) : QStringLiteral("全会话 / 当前显示轨道\n");
-        text += frames ? QStringLiteral("单进程/交换链；按Present时间归属，完整帧间隔\n") : QStringLiteral("相交事件；时长裁剪到选区，并发求和可超过墙钟时间\n");
-        // 无样本显示N/A而非误导性的0，非空值按毫秒保留三位小数。
-        auto metric = [&stats](double value) { return stats.count ? QString::number(value,'f',3) : QStringLiteral("N/A"); };
-        text += QStringLiteral("数量 %1\n总时长 %2 ms\n均值 %3 ms\nP50 / P95 / P99：%4 / %5 / %6 ms\n").arg(stats.count).arg(stats.sumMs,0,'f',3).arg(metric(stats.meanMs)).arg(metric(stats.p50Ms)).arg(metric(stats.p95Ms)).arg(metric(stats.p99Ms));
-        if (frames && stats.count) text += QStringLiteral("间隔口径FPS %1\n长帧 %2（60FPS预算，历史中位数规则v1）\n").arg(1000/stats.meanMs,0,'f',2).arg(stats.longFrames);
-        if (!stats.count) text += QStringLiteral("无有效样本；百分位和FPS不可用。\n");
-        text += QStringLiteral("\n时长分布（ms / 数量）\n≤8.33: %1\n(8.33,16.67]: %2\n(16.67,33.33]: %3\n(33.33,50]: %4\n>50: %5\n").arg(stats.histogram[0]).arg(stats.histogram[1]).arg(stats.histogram[2]).arg(stats.histogram[3]).arg(stats.histogram[4]);
-        if (frames) text += QStringLiteral("\n下表展示前200个长帧，双击定位；长帧计数不截断。");
-        summary->setPlainText(text); longest->setEnabled(bool(stats.longest));
+        summary->setHtml(statisticsHtml(stats,frames,*range)); longest->setEnabled(bool(stats.longest));
         longTable->setRowCount(int(stats.longEvents.size()));
         for (int i=0; i<int(stats.longEvents.size()); ++i) {
             const auto& e=stats.longEvents[std::size_t(i)];
             longTable->setItem(i,0,new QTableWidgetItem(QString::number(double(e.start)/1e6,'f',3)));
             longTable->setItem(i,1,new QTableWidgetItem(QString::number(double(e.duration)/1e6,'f',3)));
+            for(int column=0;column<2;++column) longTable->item(i,column)->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
         }
     });
     // 从已发布统计取最长事件并定位，空结果不执行操作。
